@@ -18,14 +18,18 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.todo.voicetodo"
+      "bundleIdentifier": "com.todo.voicetodo",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice commands for creating tasks."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.todo.voicetodo"
+      "package": "com.todo.voicetodo",
+      "permissions": ["RECORD_AUDIO"]
     },
     "web": {
       "bundler": "metro",

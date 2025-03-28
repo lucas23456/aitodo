@@ -12,6 +12,7 @@ export default {
     // Для предупреждений – насыщенный тёмно-красный
     danger: '#8B0000', 
     warning: '#444444',
+    error: '#D32F2F',  // Error color for light theme
     gray: '#777777',
     lightGray: '#DDDDDD',
     border: '#EEEEEE',
@@ -30,6 +31,7 @@ export default {
     // Опасность – яркий красный для хорошего контраста
     danger: '#8B0000', 
     warning: '#444444',
+    error: '#EF5350',  // Error color for dark theme
     gray: '#777777',
     lightGray: '#DDDDDD',
     border: '#EEEEEE',
