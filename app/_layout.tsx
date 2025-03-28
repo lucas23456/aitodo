@@ -4,9 +4,11 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { useTodoStore, initializeStore } from '@/store/todoStore';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -26,6 +28,11 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
   });
+
+  // Initialize store from AsyncStorage
+  useEffect(() => {
+    initializeStore();
+  }, []);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
@@ -47,13 +54,19 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const isDarkMode = useTodoStore(state => state.isDarkMode);
+
+  // Use the custom dark mode state from the store instead of system setting
+  const theme = isDarkMode ? DarkTheme : DefaultTheme;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={theme}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
