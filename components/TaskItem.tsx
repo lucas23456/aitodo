@@ -117,9 +117,6 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
         
         <View style={styles.contentContainer}>
           <TouchableOpacity onPress={() => onPress(task)}>
-            <Text style={[styles.companyPrefix, { color: colors.text }]}>
-              {task.company || '@company:'}
-            </Text>
             <Text 
               style={[
                 styles.taskTitle, 
@@ -390,11 +387,6 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-  },
-  companyPrefix: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
   },
   taskTitle: {
     fontSize: 14,

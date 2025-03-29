@@ -116,8 +116,19 @@ export default function TaskDetailsScreen() {
           </TouchableOpacity>
         </View>
         
-        {/* Task details */}
-        <View style={styles.section}>
+        
+        {/* Description section */}
+        {task.description && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Description</Text>
+            <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.description, { color: colors.text }]}>{task.description}</Text>
+            </View>
+          </View>
+        )}
+
+                {/* Task details */}
+                <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Details</Text>
           
           <View style={[styles.detailsCard, { backgroundColor: colors.card }]}>
@@ -145,16 +156,7 @@ export default function TaskDetailsScreen() {
             )}
           </View>
         </View>
-        
-        {/* Description section */}
-        {task.description && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Description</Text>
-            <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.description, { color: colors.text }]}>{task.description}</Text>
-            </View>
-          </View>
-        )}
+
       </ScrollView>
       
       <CapsuleMenu />

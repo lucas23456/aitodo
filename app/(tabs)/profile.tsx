@@ -31,6 +31,25 @@ export default function ProfileScreen() {
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   
+  // Setup call modal state
+  const [setupCallModalVisible, setSetupCallModalVisible] = useState(false);
+  const [callName, setCallName] = useState('');
+  const [callDate, setCallDate] = useState('');
+  const [callTime, setCallTime] = useState('');
+  const [callNotes, setCallNotes] = useState('');
+  
+  // Handle setup call
+  const handleSetupCall = () => {
+    // Here you would integrate with your calendar API or save the call details
+    alert(`Call scheduled: ${callName} on ${callDate} at ${callTime}`);
+    setSetupCallModalVisible(false);
+    // Reset form
+    setCallName('');
+    setCallDate('');
+    setCallTime('');
+    setCallNotes('');
+  };
+  
   // Add a new project
   const handleAddProject = () => {
     if (newProjectName.trim()) {
@@ -92,6 +111,15 @@ export default function ProfileScreen() {
               <Text style={[styles.profileEmail, { color: colors.secondaryText }]}>john.doe@example.com</Text>
             </View>
           </View>
+          
+          {/* Setup Call Button */}
+          <TouchableOpacity 
+            style={[styles.setupCallButton, { backgroundColor: colors.primary }]}
+            onPress={() => setSetupCallModalVisible(true)}
+          >
+            <MaterialIcons name="call" size={20} color="#FFFFFF" />
+            <Text style={styles.setupCallText}>Настроить звонок</Text>
+          </TouchableOpacity>
           
           <View style={[styles.statsContainer, { borderTopColor: colors.border, borderTopWidth: 1 }]}>
             <View style={styles.statItem}>
@@ -246,6 +274,118 @@ export default function ProfileScreen() {
                 ]}
               >
                 Create Project
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Setup Call Modal */}
+      <Modal
+        visible={setupCallModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSetupCallModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Настроить звонок</Text>
+              <TouchableOpacity onPress={() => setSetupCallModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color={colors.secondaryText} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Название</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="Введите название звонка"
+              placeholderTextColor={colors.secondaryText}
+              value={callName}
+              onChangeText={setCallName}
+            />
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Дата</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="DD/MM/YYYY"
+              placeholderTextColor={colors.secondaryText}
+              value={callDate}
+              onChangeText={setCallDate}
+            />
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Время</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="HH:MM"
+              placeholderTextColor={colors.secondaryText}
+              value={callTime}
+              onChangeText={setCallTime}
+            />
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Заметки</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                styles.textArea,
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="Дополнительная информация о звонке"
+              placeholderTextColor={colors.secondaryText}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={callNotes}
+              onChangeText={setCallNotes}
+            />
+            
+            <TouchableOpacity 
+              style={[
+                styles.addProjectButton, 
+                { 
+                  backgroundColor: callName.trim() && callDate.trim() && callTime.trim() ? 
+                    colors.primary : colors.lightGray 
+                }
+              ]}
+              onPress={handleSetupCall}
+              disabled={!callName.trim() || !callDate.trim() || !callTime.trim()}
+            >
+              <Text 
+                style={[
+                  styles.addProjectButtonText, 
+                  { 
+                    color: callName.trim() && callDate.trim() && callTime.trim() ? 
+                      colorScheme === 'dark' ? colors.card : 'white' : 
+                      colors.secondaryText 
+                  }
+                ]}
+              >
+                Подтвердить звонок
               </Text>
             </TouchableOpacity>
           </View>
@@ -469,5 +609,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 12,
     textAlign: 'center',
+  },
+  setupCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginVertical: 16,
+    borderRadius: 10,
+  },
+  setupCallText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginLeft: 8,
+    fontSize: 16,
   },
 }); 

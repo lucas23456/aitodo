@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
   },
   backButtonFloating: {
     position: 'absolute',
-    top: 50,
+    top: 20,
     left: 20,
     width: 40,
     height: 40,

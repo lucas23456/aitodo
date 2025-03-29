@@ -24,7 +24,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].primary,
         // Disable the static render of the header on web
         // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        headerShown: false,
         // Hide the tab bar since we're using a capsule menu
         tabBarStyle: { display: 'none' }
       }}>
@@ -33,7 +33,6 @@ export default function TabLayout() {
         options={{
           title: 'Tasks',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -41,7 +40,6 @@ export default function TabLayout() {
         options={{
           title: 'Upcoming',
           tabBarIcon: ({ color }) => <TabBarIcon name="event" color={color} />,
-          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -49,7 +47,6 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color }) => <TabBarIcon name="settings" color={color} />,
-          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -57,7 +54,6 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <TabBarIcon name="person" color={color} />,
-          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -65,7 +61,6 @@ export default function TabLayout() {
         options={{
           title: 'Voice Input',
           tabBarIcon: ({ color }) => <TabBarIcon name="mic" color={color} />,
-          headerShown: false,
         }}
       />
     </Tabs>

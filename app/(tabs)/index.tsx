@@ -8,8 +8,6 @@ import { useColorScheme } from '@/components/useColorScheme';
 import TaskItem from '@/components/TaskItem';
 import TaskForm from '@/components/TaskForm';
 import EmptyState from '@/components/EmptyState';
-import DateSlider from '@/components/DateSlider';
-import CalendarModal from '@/components/CalendarModal';
 import CapsuleMenu from '@/components/CapsuleMenu';
 import Colors from '@/constants/Colors';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -27,41 +25,29 @@ export default function TasksScreen() {
   
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
-  
-  // Sample data for project prefixes
-  const companySamples = ['@coinbase:', '@apple:', '@shopify:', '@insurance:'];
   
   // Filter and sort tasks by date and completion status
   const filteredAndSortedTasks = useMemo(() => {
-    // For date filtering, convert selectedDate to start of day for comparison
-    const selectedDateStart = startOfDay(selectedDate);
+    // Get today's date
+    const today = startOfDay(new Date());
     
-    // Filter tasks for the selected date
-    const tasksForSelectedDate = tasks.filter(task => {
+    // Filter tasks for today
+    const todaysTasks = tasks.filter(task => {
       if (!task.dueDate) return false;
       
       const taskDate = startOfDay(new Date(task.dueDate));
-      return isSameDay(taskDate, selectedDateStart);
+      return isSameDay(taskDate, today);
     });
     
     // Group tasks by completion status
-    const incompleteTasks = tasksForSelectedDate.filter(task => !task.completed);
-    const completedTasks = tasksForSelectedDate.filter(task => task.completed);
-    
-    // Group incomplete tasks by time of day
-    const morningTasks = incompleteTasks.filter((_, index) => index < 3);
-    const afternoonTasks = incompleteTasks.filter((_, index) => index >= 3 && index < 6);
-    const eveningTasks = incompleteTasks.filter((_, index) => index >= 6 && index < 9);
+    const incompleteTasks = todaysTasks.filter(task => !task.completed);
+    const completedTasks = todaysTasks.filter(task => task.completed);
     
     return {
-      morning: morningTasks,
-      afternoon: afternoonTasks,
-      evening: eveningTasks,
+      incomplete: incompleteTasks,
       completed: completedTasks
     };
-  }, [tasks, selectedDate]);
+  }, [tasks]);
   
   const handleAddTask = () => {
     setSelectedTask(undefined);
@@ -96,27 +82,11 @@ export default function TasksScreen() {
     setIsFormVisible(false);
   };
   
-  const handleDateSelect = (date: Date) => {
-    setSelectedDate(date);
-  };
-  
-  const handleCalendarPress = () => {
-    setIsCalendarVisible(true);
-  };
-  
-  // Prepare data for the Section List when viewing by date
+  // Prepare data for the Section List for today's tasks
   const sectionListData = [
     {
-      title: 'Morning',
-      data: filteredAndSortedTasks.morning
-    },
-    {
-      title: 'Afternoon',
-      data: filteredAndSortedTasks.afternoon
-    },
-    {
-      title: 'Evening',
-      data: filteredAndSortedTasks.evening
+      title: 'Tasks',
+      data: filteredAndSortedTasks.incomplete
     },
     {
       title: 'Completed',
@@ -124,8 +94,8 @@ export default function TasksScreen() {
     }
   ].filter(section => section.data.length > 0);
   
-  // Check if there are no tasks for the selected date
-  const noTasksForSelectedDate = sectionListData.every(section => section.data.length === 0);
+  // Check if there are no tasks for today
+  const noTasksForToday = sectionListData.every(section => section.data.length === 0);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -134,32 +104,11 @@ export default function TasksScreen() {
       {/* Header with today title and task count */}
       <View style={styles.headerContainer}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>today</Text>
-        
-        <View style={styles.taskCountContainer}>
-          <View style={[styles.countBadge, { backgroundColor: colors.card }]}>
-            <Text style={[styles.countText, { color: colors.text }]}>
-              {tasks.filter(t => !t.completed).length}
-            </Text>
-          </View>
-          
-          <View style={[styles.timeProgressContainer, { backgroundColor: colors.card }]}>
-            <Text style={[styles.timeProgressText, { color: colors.text }]}>
-              1.5 of 7.5 hrs
-            </Text>
-          </View>
-        </View>
       </View>
       
-      {/* Date Navigation */}
-      <DateSlider 
-        selectedDate={selectedDate}
-        onSelectDate={handleDateSelect}
-        onPressHeader={handleCalendarPress}
-      />
-      
       {/* Tasks list or empty state */}
-      {noTasksForSelectedDate ? (
-        <EmptyState message="No tasks for this day. Add a new task!" />
+      {noTasksForToday ? (
+        <EmptyState message="No tasks for today. Add a new task!" />
       ) : (
         <SectionList
           sections={sectionListData}
@@ -170,6 +119,7 @@ export default function TasksScreen() {
               onToggleComplete={toggleTaskStatus}
               onDelete={deleteTask}
               onPress={handleTaskPress}
+              onEdit={handleEditTask}
             />
           )}
           renderSectionHeader={({ section: { title } }) => (
@@ -190,14 +140,6 @@ export default function TasksScreen() {
         onSubmit={handleSubmitTask}
         initialTask={selectedTask}
       />
-      
-      <CalendarModal
-        visible={isCalendarVisible}
-        onClose={() => setIsCalendarVisible(false)}
-        selectedDate={selectedDate}
-        onSelectDate={handleDateSelect}
-        markedDates={{}}
-      />
     </SafeAreaView>
   );
 }
@@ -210,7 +152,8 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 4,
+    paddingBottom: 16,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -252,12 +195,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  sectionIconText: {
-    fontSize: 14,
-  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '500',
@@ -266,6 +203,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 100,
+    paddingTop: 8,
   },
   emptyDateContainer: {
     flex: 1,
