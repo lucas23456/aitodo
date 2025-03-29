@@ -1,16 +1,19 @@
-import React from 'react';
-import { TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
-import { AntDesign } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { TouchableOpacity, StyleSheet, Animated, Easing, View, Text } from 'react-native';
+import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
+import { router } from 'expo-router';
+import { useTodoStore } from '@/store/todoStore';
 
 type FABProps = {
   onPress: () => void;
 };
 
 export default function FloatingActionButton({ onPress }: FABProps) {
+  const isDarkMode = useTodoStore((state) => state.isDarkMode);
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
   // Animation for button press
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
@@ -33,34 +36,64 @@ export default function FloatingActionButton({ onPress }: FABProps) {
     }).start();
   };
   
+  const handleVoicePress = () => {
+    router.push('/voice-input');
+  };
+  
   return (
-    <Animated.View style={[
-      styles.container,
-      { transform: [{ scale: scaleAnim }] }
-    ]}>
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: colors.primary }]}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      >
-        <AntDesign name="plus" size={24} color="white" />
-      </TouchableOpacity>
-    </Animated.View>
+    <View style={styles.fabContainer}>
+      {/* Voice input button */}
+      <Animated.View style={[
+        styles.container,
+        styles.voiceContainer,
+        { transform: [{ scale: scaleAnim }] }
+      ]}>
+        <TouchableOpacity
+          style={[styles.button, styles.voiceButton, { backgroundColor: colors.primary }]}
+          onPress={handleVoicePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
+          <MaterialIcons name="mic" size={24} color="white" />
+        </TouchableOpacity>
+      </Animated.View>
+      
+      {/* Main add button */}
+      <Animated.View style={[
+        styles.container,
+        { transform: [{ scale: scaleAnim }] }
+      ]}>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: colors.primary }]}
+          onPress={onPress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+        >
+          <AntDesign name="plus" size={24} color="white" />
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  fabContainer: {
     position: 'absolute',
     right: 24,
     bottom: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
     zIndex: 999,
+  },
+  container: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
+  },
+  voiceContainer: {
+    marginRight: 16,
   },
   button: {
     width: 56,
@@ -68,5 +101,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  voiceButton: {
+    backgroundColor: '#FF5722',
   },
 }); 

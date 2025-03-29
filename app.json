@@ -41,6 +41,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "openRouterApiKey": "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",
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
     }
   }
 }

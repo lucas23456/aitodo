@@ -10,6 +10,7 @@ import CapsuleMenu from '@/components/CapsuleMenu';
 import { useTodoStore } from '@/store/todoStore';
 import * as Permissions from 'expo-permissions';
 import { Audio } from 'expo-av';
+import { processVoiceText } from '@/utils/speechProcessor';
 
 export default function VoiceInputScreen() {
   const colorScheme = useColorScheme();
@@ -22,6 +23,7 @@ export default function VoiceInputScreen() {
   const [transcript, setTranscript] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [processingTask, setProcessingTask] = useState(false);
+  const [processingState, setProcessingState] = useState<'idle' | 'parsing' | 'creating' | 'completed' | 'error'>('idle');
   const [webViewReady, setWebViewReady] = useState(false);
   const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(true);
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -34,6 +36,7 @@ export default function VoiceInputScreen() {
   // Анимационные значения
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
+  const voiceScale = useRef(new Animated.Value(1)).current;
   
   // Check and request permissions
   useEffect(() => {
@@ -76,9 +79,10 @@ export default function VoiceInputScreen() {
   // Auto-start recording when page loads and permissions granted
   useEffect(() => {
     if (webViewReady && !isRecording && permissionGranted) {
-      // Start recording with a short delay to ensure the WebView is fully ready
+      // Start recording with a delay to ensure the WebView is fully ready
       const timer = setTimeout(() => {
-        startRecording();
+        // We don't want to auto-start anymore
+        // startRecording();
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -127,6 +131,27 @@ export default function VoiceInputScreen() {
     };
   }, [isRecording, transcript]);
   
+  // Анимация реакции на звук
+  useEffect(() => {
+    if (isRecording && (speechDetected || soundDetected)) {
+      // Создаем анимацию, которая делает круг больше при обнаружении звука
+      Animated.sequence([
+        Animated.timing(voiceScale, {
+          toValue: 1.3,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(voiceScale, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      voiceScale.setValue(1);
+    }
+  }, [isRecording, speechDetected, soundDetected]);
+  
   // Анимация нажатия кнопки
   const animateButtonPress = () => {
     Animated.sequence([
@@ -150,6 +175,7 @@ export default function VoiceInputScreen() {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap:">
       <style>
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -174,22 +200,91 @@ export default function VoiceInputScreen() {
           width: 100%;
           white-space: pre-wrap;
         }
+        .error {
+          color: ${colors.error};
+          text-align: center;
+          padding: 20px;
+        }
+        .debug {
+          font-size: 12px;
+          opacity: 0.7;
+          margin-top: 20px;
+        }
       </style>
     </head>
     <body>
-      <div id="status">Ready to start voice recognition</div>
+      <div id="status">Подготовка распознавания речи...</div>
       <div id="result"></div>
       
       <script>
         // Function to communicate with React Native
         function sendToReactNative(type, data) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type, data }));
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type, data }));
+          } else {
+            console.error("ReactNativeWebView not available");
+            document.getElementById('status').innerHTML = '<div class="error">Ошибка: ReactNativeWebView недоступен</div>';
+          }
         }
         
         // Initialize speech recognition
         let recognition = null;
         let isRecording = false;
         let recognitionTimeout = null;
+        let soundDetectionTimeout = null;
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let javascriptNode = null;
+        
+        // Check browser support
+        document.addEventListener('DOMContentLoaded', function() {
+          try {
+            // Check if SpeechRecognition is available
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+              throw new Error('Speech recognition not supported');
+            }
+            
+            // Initialize recognition
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ru-RU'; // Set Russian language for recognition
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+            
+            setupRecognitionHandlers();
+            document.getElementById('status').textContent = 'Готово к записи';
+            
+            // Inform React Native that we're ready
+            sendToReactNative('ready', { supported: true });
+            
+            // Setup audio processing for sound detection if available
+            setupAudioProcessing();
+            
+          } catch (error) {
+            console.error('Speech recognition initialization error:', error);
+            document.getElementById('status').innerHTML = '<div class="error">Ошибка: распознавание речи не поддерживается в вашем браузере</div>';
+            sendToReactNative('ready', { supported: false, error: error.message });
+          }
+        });
+        
+        // Setup audio processing for sound detection
+        function setupAudioProcessing() {
+          try {
+            // Check if Web Audio API is available
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (window.AudioContext) {
+              audioContext = new AudioContext();
+              analyser = audioContext.createAnalyser();
+              analyser.minDecibels = -90;
+              analyser.maxDecibels = -10;
+              analyser.smoothingTimeConstant = 0.85;
+            }
+          } catch (e) {
+            console.log('Web Audio API is not supported');
+          }
+        }
         
         // Настройка обработчиков событий для SpeechRecognition
         function setupRecognitionHandlers() {
@@ -197,11 +292,19 @@ export default function VoiceInputScreen() {
             isRecording = true;
             document.getElementById('status').textContent = 'Слушаю...';
             sendToReactNative('status', { isRecording: true });
+            
+            // Start audio processing if available
+            if (audioContext && navigator.mediaDevices) {
+              startAudioProcessing();
+            }
           };
           
           recognition.onresult = function(event) {
             let finalTranscript = '';
             let interimTranscript = '';
+            
+            // Signal that speech was detected
+            sendToReactNative('speechDetected', { detected: true });
             
             // Обработка результатов с учетом промежуточных результатов
             for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -214,169 +317,193 @@ export default function VoiceInputScreen() {
             }
             
             // Отображаем текст и отправляем в React Native
-            const displayText = finalTranscript + interimTranscript;
+            const displayText = finalTranscript + (interimTranscript ? ' ' + interimTranscript : '');
             document.getElementById('result').textContent = displayText;
             sendToReactNative('transcript', { 
               text: displayText,
               isFinal: finalTranscript.length > 0
             });
+            
+            // If final result is available and we're still recording, reset recognition
+            // to keep it going continuously
+            if (finalTranscript && isRecording) {
+              // Restart recognition after a short delay to catch the next phrase
+              clearTimeout(recognitionTimeout);
+              recognitionTimeout = setTimeout(() => {
+                if (isRecording) {
+                  recognition.stop();
+                  setTimeout(() => {
+                    if (isRecording) {
+                      try {
+                        recognition.start();
+                      } catch (e) {
+                        console.error('Error restarting recognition:', e);
+                      }
+                    }
+                  }, 200);
+                }
+              }, 1000);
+            }
           };
           
           recognition.onerror = function(event) {
-            document.getElementById('status').textContent = 'Ошибка: ' + event.error;
-            sendToReactNative('error', { message: event.error });
+            console.error('Recognition error:', event.error);
             
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-              sendToReactNative('permission', { allowed: false });
+            // Only show errors that are not "no-speech" which is common
+            if (event.error !== 'no-speech') {
+              document.getElementById('status').textContent = 'Ошибка: ' + event.error;
+              sendToReactNative('error', { error: event.error });
+            }
+            
+            // If we encounter an error that's not "aborted", try to restart recognition
+            if (isRecording && event.error !== 'aborted') {
+              clearTimeout(recognitionTimeout);
+              recognitionTimeout = setTimeout(() => {
+                if (isRecording) {
+                  try {
+                    recognition.start();
+                  } catch (e) {
+                    console.error('Error restarting recognition after error:', e);
+                    isRecording = false;
+                    sendToReactNative('status', { isRecording: false });
+                  }
+                }
+              }, 1000);
             }
           };
           
           recognition.onend = function() {
-            isRecording = false;
-            document.getElementById('status').textContent = 'Запись остановлена';
-            sendToReactNative('status', { isRecording: false });
-            
-            // On Android, we need to restart recognition manually as it stops after a few seconds
-            if (window.continuousRecognition && !window.stoppedManually) {
+            // If we're supposed to be recording but recognition ended, restart it
+            if (isRecording) {
               clearTimeout(recognitionTimeout);
               recognitionTimeout = setTimeout(() => {
-                try {
-                  recognition.start();
-                } catch (e) {
-                  console.error("Failed to restart recognition", e);
+                if (isRecording) {
+                  try {
+                    recognition.start();
+                  } catch (e) {
+                    console.error('Error restarting recognition:', e);
+                    isRecording = false;
+                    document.getElementById('status').textContent = 'Запись окончена';
+                    sendToReactNative('status', { isRecording: false });
+                  }
                 }
-              }, 300);
+              }, 200);
+            } else {
+              document.getElementById('status').textContent = 'Запись окончена';
+              sendToReactNative('status', { isRecording: false });
+              
+              // Stop audio processing
+              stopAudioProcessing();
             }
-          };
-          
-          // Дополнительные события из документации MDN
-          recognition.onaudiostart = function() {
-            sendToReactNative('audio', { status: 'started' });
-          };
-          
-          recognition.onaudioend = function() {
-            sendToReactNative('audio', { status: 'ended' });
-          };
-          
-          recognition.onsoundstart = function() {
-            document.getElementById('status').textContent = 'Обнаружен звук...';
-            sendToReactNative('sound', { status: 'started' });
-          };
-          
-          recognition.onsoundend = function() {
-            sendToReactNative('sound', { status: 'ended' });
-          };
-          
-          recognition.onspeechstart = function() {
-            document.getElementById('status').textContent = 'Обнаружена речь...';
-            sendToReactNative('speech', { status: 'started' });
-          };
-          
-          recognition.onspeechend = function() {
-            document.getElementById('status').textContent = 'Речь завершена';
-            sendToReactNative('speech', { status: 'ended' });
-          };
-          
-          recognition.onnomatch = function() {
-            document.getElementById('status').textContent = 'Речь не распознана';
-            sendToReactNative('nomatch', {});
           };
         }
         
-        // Создание нового экземпляра распознавания
-        function createRecognitionInstance() {
-          try {
-            // Получаем конструктор SpeechRecognition - trying multiple possibilities
-            const SpeechRecognition = 
-              window.SpeechRecognition || 
-              window.webkitSpeechRecognition ||
-              window.mozSpeechRecognition ||
-              window.msSpeechRecognition;
-            
-            if (!SpeechRecognition) {
-              sendToReactNative('error', { message: 'Speech recognition not supported', supported: false });
-              return false;
-            }
-            
-            // Создаем экземпляр
-            recognition = new SpeechRecognition();
-            
-            // Настройка параметров
-            recognition.continuous = false;     // Set to false for Android compatibility
-            recognition.interimResults = true;  // Промежуточные результаты
-            recognition.lang = 'ru-RU';         // Русский язык
-            recognition.maxAlternatives = 1;    // Только один вариант распознавания
-            
-            // Flag for automatic restart
-            window.continuousRecognition = true;
-            window.stoppedManually = false;
-            
-            // Настройка обработчиков
-            setupRecognitionHandlers();
-            
-            return true;
-          } catch (error) {
-            console.error("Speech recognition error:", error);
-            sendToReactNative('error', { message: error.message || 'Speech recognition error', supported: false });
-            return false;
-          }
+        // Process audio for sound detection
+        function startAudioProcessing() {
+          if (!audioContext || !analyser) return;
+          
+          navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(function(stream) {
+              microphone = audioContext.createMediaStreamSource(stream);
+              microphone.connect(analyser);
+              
+              analyser.fftSize = 256;
+              const bufferLength = analyser.frequencyBinCount;
+              const dataArray = new Uint8Array(bufferLength);
+              
+              // Check for sound regularly
+              function checkSound() {
+                if (!isRecording) return;
+                
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate average volume level
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                  sum += dataArray[i];
+                }
+                const average = sum / bufferLength;
+                
+                // If volume is above threshold, sound is detected
+                if (average > 15) { // Threshold - may need adjustment
+                  sendToReactNative('soundDetected', { detected: true, level: average });
+                  
+                  // Prevent too many messages by using a timeout
+                  clearTimeout(soundDetectionTimeout);
+                  soundDetectionTimeout = setTimeout(() => {
+                    sendToReactNative('soundDetected', { detected: false });
+                  }, 200);
+                }
+                
+                // Continue checking if still recording
+                if (isRecording) {
+                  requestAnimationFrame(checkSound);
+                }
+              }
+              
+              // Start checking sound
+              requestAnimationFrame(checkSound);
+            })
+            .catch(function(err) {
+              console.error('Error accessing the microphone:', err);
+            });
         }
         
-        // Функция запуска распознавания
-        window.startRecording = function() {
-          if (isRecording) return;
-          
-          window.stoppedManually = false;
-          
-          if (!recognition) {
-            if (!createRecognitionInstance()) {
-              sendToReactNative('error', { message: 'Failed to initialize speech recognition', supported: false });
-              return; // Если не удалось создать экземпляр, выходим
-            }
+        // Stop audio processing
+        function stopAudioProcessing() {
+          if (microphone) {
+            microphone.disconnect();
+            microphone = null;
           }
           
+          clearTimeout(soundDetectionTimeout);
+        }
+        
+        // Start recording
+        function startRecording() {
           try {
-            recognition.start();
-            sendToReactNative('status', { isRecording: true });
-          } catch (error) {
-            console.error("Start recording error:", error);
-            // Try to recreate recognition instance if it failed
-            if (!createRecognitionInstance()) {
-              sendToReactNative('error', { message: 'Could not initialize speech recognition', supported: false });
-              return;
-            }
-            
-            try {
+            if (!isRecording && recognition) {
               recognition.start();
-            } catch (e) {
-              sendToReactNative('error', { message: e.message || 'Failed to start recording after retry', supported: false });
+              isRecording = true;
             }
-          }
-        };
-        
-        // Функция остановки распознавания
-        window.stopRecording = function() {
-          if (!isRecording || !recognition) return;
-          
-          window.stoppedManually = true;
-          window.continuousRecognition = false;
-          
-          clearTimeout(recognitionTimeout);
-          
-          try {
-            recognition.stop();
-            sendToReactNative('status', { isRecording: false });
           } catch (error) {
-            sendToReactNative('error', { message: error.message || 'Failed to stop recording' });
+            console.error('Error starting recognition:', error);
+            sendToReactNative('error', { error: error.message });
           }
-        };
+        }
         
-        // Инициализация при загрузке страницы
-        window.addEventListener('DOMContentLoaded', function() {
-          setTimeout(() => {
-            const supported = createRecognitionInstance();
-            sendToReactNative('ready', { supported: supported });
-          }, 500);
+        // Stop recording
+        function stopRecording() {
+          try {
+            if (isRecording && recognition) {
+              clearTimeout(recognitionTimeout);
+              isRecording = false;
+              recognition.stop();
+              stopAudioProcessing();
+            }
+          } catch (error) {
+            console.error('Error stopping recognition:', error);
+          }
+        }
+        
+        // Receive messages from React Native
+        window.addEventListener('message', function(event) {
+          try {
+            const message = JSON.parse(event.data);
+            switch(message.action) {
+              case 'start':
+                startRecording();
+                break;
+              case 'stop':
+                stopRecording();
+                break;
+              case 'reset':
+                document.getElementById('result').textContent = '';
+                break;
+            }
+          } catch (error) {
+            console.error('Error processing message:', error);
+          }
         });
       </script>
     </body>
@@ -386,147 +513,214 @@ export default function VoiceInputScreen() {
   // Handle messages from the WebView
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
-      const message = JSON.parse(event.nativeEvent.data);
+      const data = JSON.parse(event.nativeEvent.data);
       
-      switch (message.type) {
-        case 'status':
-          setIsRecording(message.data.isRecording);
-          break;
-        case 'transcript':
-          setTranscript(message.data.text);
-          // Если это финальный результат и у нас есть текст, автоматически создаем задачу
-          if (message.data.isFinal && message.data.text.trim() && !processingTask) {
-            // Добавляем небольшую задержку перед созданием задачи
-            setTimeout(() => {
-              createTaskFromVoice();
-            }, 1000);
-          }
-          break;
+      switch (data.type) {
         case 'ready':
-          setIsLoading(false);
           setWebViewReady(true);
-          setSpeechRecognitionSupported(message.data.supported);
+          setSpeechRecognitionSupported(data.data.supported);
+          setIsLoading(false);
+          console.log('WebView ready, speech recognition supported:', data.data.supported);
+          break;
           
-          if (!message.data.supported) {
-            Alert.alert(
-              'Ошибка',
-              'Распознавание речи не поддерживается на вашем устройстве.',
-              [{ text: 'OK', onPress: () => router.back() }]
-            );
+        case 'transcript':
+          if (data.data.text && data.data.text.trim()) {
+            setTranscript(data.data.text.trim());
           }
           break;
+          
+        case 'status':
+          setIsRecording(data.data.isRecording);
+          break;
+          
         case 'error':
-          console.log('Voice recognition error:', message.data.message);
-          if (message.data.supported === false) {
-            setSpeechRecognitionSupported(false);
+          console.error('Speech recognition error:', data.data.error);
+          // Handle serious errors only
+          if (data.data.error !== 'no-speech' && data.data.error !== 'aborted') {
             Alert.alert(
-              'Ошибка',
-              'Распознавание речи не поддерживается на вашем устройстве.',
-              [{ text: 'OK', onPress: () => router.back() }]
-            );
-          }
-          break;
-        case 'permission':
-          if (!message.data.allowed) {
-            Alert.alert(
-              'Ошибка доступа к микрофону',
-              'Пожалуйста, разрешите доступ к микрофону в настройках браузера.',
+              'Ошибка распознавания',
+              `Произошла ошибка: ${data.data.error}`,
               [{ text: 'OK' }]
             );
           }
           break;
-        case 'sound':
-          setSoundDetected(message.data.status === 'started');
+          
+        case 'speechDetected':
+          setSpeechDetected(data.data.detected);
           break;
-        case 'speech':
-          setSpeechDetected(message.data.status === 'started');
+          
+        case 'soundDetected':
+          setSoundDetected(data.data.detected);
           break;
-        case 'audio':
-        case 'nomatch':
-          // Обрабатываем дополнительные события если нужно
-          console.log(`Voice event: ${message.type}`, message.data);
-          break;
+          
+        default:
+          console.log('Unhandled WebView message type:', data.type);
       }
-    } catch (e) {
-      console.error('Error parsing message:', e);
+    } catch (error) {
+      console.error('Error handling WebView message:', error);
     }
   };
   
   // Start recording
   const startRecording = () => {
-    if (!permissionGranted) {
-      Alert.alert(
-        'Permission Required',
-        'Microphone access is required to use voice recognition. Please grant permission in your device settings.',
-        [{ text: 'OK' }]
-      );
+    if (!webViewReady || !permissionGranted) {
       return;
     }
     
-    if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        if (window.startRecording) {
-          window.startRecording();
-        }
-        true;
-      `);
-    }
+    animateButtonPress();
+    
+    webViewRef.current?.injectJavaScript(`
+      try {
+        window.postMessage(JSON.stringify({action: 'start'}), '*');
+      } catch(e) {
+        console.error('Error starting recording:', e);
+      }
+      true;
+    `);
+    
+    setIsRecording(true);
   };
   
   // Stop recording
   const stopRecording = () => {
-    if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        if (window.stopRecording) {
-          window.stopRecording();
-        }
-        true;
-      `);
+    if (!webViewReady || !isRecording) {
+      return;
     }
+    
+    animateButtonPress();
+    
+    webViewRef.current?.injectJavaScript(`
+      try {
+        window.postMessage(JSON.stringify({action: 'stop'}), '*');
+      } catch(e) {
+        console.error('Error stopping recording:', e);
+      }
+      true;
+    `);
+    
+    setIsRecording(false);
   };
   
   // Toggle speech recognition
   const toggleRecording = () => {
-    animateButtonPress();
-    webViewRef.current?.injectJavaScript(`
-      (function() {
-        window.postMessage(JSON.stringify({ action: 'toggle' }), '*');
-        true;
-      })();
-    `);
+    // Animate button press
+    Animated.sequence([
+      Animated.timing(buttonScale, {
+        toValue: 0.85,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    // Toggle recording state
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   };
   
   // Create a task from voice input
-  const createTaskFromVoice = () => {
+  const createTaskFromVoice = async () => {
     if (!transcript.trim()) {
       return;
     }
     
     setProcessingTask(true);
     
-    // Simple parsing logic - this could be enhanced with NLP in the future
+    try {
+      // Показываем анимацию обработки
+      setProcessingState('parsing');
+      
+      // Обрабатываем входящий текст через нейросеть
+      const processedTasks = await processVoiceText(transcript.trim());
+      
+      // Меняем состояние обработки
+      setProcessingState('creating');
+      
+      if (processedTasks.length === 0) {
+        // Если нет задач, создаем базовую задачу
+        createBasicTask(transcript.trim());
+        return;
+      }
+      
+      // Добавляем каждую обработанную задачу
+      for (const task of processedTasks) {
+        // Преобразуем в формат, ожидаемый addTask
+        const newTask = {
+          title: task.title,
+          description: task.description || '',
+          dueDate: task.dueDate || new Date().toISOString(),
+          completed: false,
+          category: task.category || 'Voice Input',
+          priority: task.priority || 'medium',
+          tags: task.tags || ['Voice'],
+          estimatedTime: task.estimatedTime || '15 min'
+        };
+        
+        // Добавляем задачу
+        addTask(newTask);
+      }
+      
+      // Сбрасываем состояние обработки
+      setProcessingState('completed');
+      
+      // Показываем сообщение об успехе
+      const taskCount = processedTasks.length;
+      Alert.alert(
+        taskCount > 1 ? 'Задачи созданы' : 'Задача создана',
+        taskCount > 1 
+          ? `Создано ${taskCount} задач из вашего голосового ввода` 
+          : `Создана задача: "${processedTasks[0].title}"`,
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              setTranscript('');
+              setProcessingTask(false);
+              setProcessingState('idle');
+              router.push('/');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error processing voice task:', error);
+      // В случае ошибки создаем базовую задачу
+      setProcessingState('error');
+      createBasicTask(transcript.trim());
+    }
+  };
+  
+  // Вспомогательная функция для создания базовой задачи (запасной вариант)
+  const createBasicTask = (text: string) => {
     const today = new Date();
-    const taskTitle = transcript.trim();
+    const taskTitle = text;
     
-    // Create a basic task with the transcript as the title
+    // Создаем простую задачу с текстом как заголовком
     const newTask = {
-      title: taskTitle,
+      title: `📝 ${taskTitle}`,
       description: '',
       dueDate: today.toISOString(),
       completed: false,
       category: 'Voice Input',
       priority: 'medium' as 'low' | 'medium' | 'high',
       tags: ['Voice'],
-      estimatedTime: '30 min'
+      estimatedTime: '15 min'
     };
     
-    // Add task to store
+    // Добавляем задачу
     addTask(newTask);
     
-    // Show success message and reset
+    // Показываем сообщение об успехе
     Alert.alert(
       'Задача создана',
-      'Задача успешно добавлена в список',
+      `Вы сказали: "${taskTitle}"`,
       [
         { 
           text: 'OK', 
@@ -540,46 +734,46 @@ export default function VoiceInputScreen() {
     );
   };
   
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+  // Add automatic task creation when voice input is completed
+  useEffect(() => {
+    if (transcript.trim() && !isRecording && recordingState === 'processing' && !processingTask) {
+      // Auto-create task after a short delay to give user time to see transcription
+      const timer = setTimeout(() => {
+        createTaskFromVoice();
+      }, 1500);
       
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <MaterialIcons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Голосовой ввод</Text>
-        <View style={styles.rightHeaderSpace} />
-      </View>
+      return () => clearTimeout(timer);
+    }
+  }, [transcript, isRecording, recordingState, processingTask]);
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
       
       <View style={styles.content}>
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.text }]}>Загрузка распознавания речи...</Text>
+            <ActivityIndicator size="large" color="#000000" />
           </View>
         )}
         
         {!speechRecognitionSupported && (
           <View style={styles.errorContainer}>
-            <MaterialIcons name="error-outline" size={48} color={colors.error} />
-            <Text style={[styles.errorText, { color: colors.error }]}>
-              Распознавание речи не поддерживается на этом устройстве.
+            <MaterialIcons name="error-outline" size={48} color="#FF0000" />
+            <Text style={[styles.errorText, { color: '#000000' }]}>
+              Распознавание речи не поддерживается на вашем устройстве
             </Text>
           </View>
         )}
         
         {!permissionGranted && speechRecognitionSupported && (
           <View style={styles.errorContainer}>
-            <MaterialIcons name="mic-off" size={48} color={colors.error} />
-            <Text style={[styles.errorText, { color: colors.error }]}>
-              Требуется разрешение на доступ к микрофону для распознавания речи.
+            <MaterialIcons name="mic-off" size={48} color="#FF0000" />
+            <Text style={[styles.errorText, { color: '#000000' }]}>
+              Требуется разрешение на использование микрофона
             </Text>
             <TouchableOpacity 
-              style={[styles.permissionButton, { backgroundColor: colors.primary }]}
+              style={[styles.permissionButton, { backgroundColor: '#000000' }]}
               onPress={() => {
                 Audio.requestPermissionsAsync().then(({status}) => {
                   setPermissionGranted(status === 'granted');
@@ -591,78 +785,74 @@ export default function VoiceInputScreen() {
           </View>
         )}
         
-        {isRecording && (
-          <View style={styles.micStatusContainer}>
+        {/* Voice recording status text */}
+        <Text style={styles.statusText}>
+          {processingTask ? 
+            processingState === 'parsing' ? 'Обработка текста...' :
+            processingState === 'creating' ? 'Создание задачи...' :
+            processingState === 'error' ? 'Произошла ошибка...' :
+            'Обработка...' 
+            : 
+            isRecording ? 'Говорите...' : 
+            'Нажмите на кнопку для записи голоса'}
+        </Text>
+        
+        {/* Animated mic button only */}
+        <View style={styles.animationContainer}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={toggleRecording}
+            disabled={processingTask}
+            style={styles.buttonWrapper}
+          >
+            {/* Основная анимированная капсула/круг */}
             <Animated.View 
               style={[
-                styles.micStatusIndicator, 
-                { backgroundColor: colors.primary, transform: [{ scale: pulseAnim }] }
-              ]} 
-            />
-            <Text style={[styles.micStatusText, { color: colors.text }]}>
-              Микрофон активен
-            </Text>
-          </View>
-        )}
-        
-        <Text style={[styles.transcriptText, { color: colors.text }]}>
-          {transcript || "Говорите, чтобы создать задачу..."}
-        </Text>
-        
-        {/* Пульсирующая кнопка микрофона */}
-        <Animated.View style={{
-          transform: [
-            { scale: pulseAnim }
-          ],
-        }}>
-          <Animated.View style={{
-            transform: [
-              { scale: buttonScale }
-            ]
-          }}>
-            <TouchableOpacity
-              style={[
-                styles.micButton,
-                { backgroundColor: isRecording ? colors.danger : colors.card },
-                isRecording && styles.micButtonRecording
+                styles.voiceCircle, 
+                { 
+                  width: processingTask ? 300 : 200,
+                  height: processingTask ? 60 : 200,
+                  borderRadius: processingTask ? 30 : 100,
+                  transform: [
+                    { scale: !processingTask ? Animated.multiply(
+                      Animated.multiply(
+                        pulseAnim,
+                        voiceScale
+                      ),
+                      buttonScale
+                    ) : 1 }
+                  ],
+                  backgroundColor: '#000000',
+                  borderColor: isRecording ? '#FF0000' : 'transparent',
+                  borderWidth: isRecording ? 3 : 0,
+                }
               ]}
-              onPress={toggleRecording}
             >
-              <MaterialIcons 
-                name={isRecording ? "stop" : "mic"} 
-                size={32} 
-                color={isRecording ? colors.card : colors.text} 
-              />
-            </TouchableOpacity>
-          </Animated.View>
-        </Animated.View>
-        
-        <Text style={[styles.statusText, { color: colors.secondaryText }]}>
-          {isRecording 
-            ? (speechDetected 
-              ? "Слушаю речь..." 
-              : (soundDetected ? "Слушаю звуки..." : "Слушаю..."))
-            : (processingTask ? "Обработка..." : "Нажмите на микрофон, чтобы начать")}
-        </Text>
-        
-        {transcript && !isRecording && !processingTask ? (
-          <TouchableOpacity
-            style={[styles.createTaskButton, { backgroundColor: colors.primary }]}
-            onPress={createTaskFromVoice}
-            disabled={processingTask}
-          >
-            {processingTask ? (
-              <ActivityIndicator size="small" color={colors.background} />
-            ) : (
-              <>
-                <MaterialIcons name="add-task" size={20} color={colors.background} />
-                <Text style={[styles.createTaskText, { color: colors.background }]}>
-                  Создать задачу
-                </Text>
-              </>
-            )}
+              {isRecording && !processingTask && (
+                <Animated.View 
+                  style={[
+                    styles.innerPulse, 
+                    { 
+                      transform: [{ scale: voiceScale }],
+                      backgroundColor: 'rgba(255, 0, 0, 0.2)', 
+                      width: 200,
+                      height: 200,
+                      borderRadius: 100,
+                    }
+                  ]} 
+                />
+              )}
+              
+              {!processingTask && (
+                <MaterialIcons name="mic" size={50} color="#FFFFFF" />
+              )}
+              
+              {processingTask && (
+                <Text style={styles.processingLabel}>Обработка...</Text>
+              )}
+            </Animated.View>
           </TouchableOpacity>
-        ) : null}
+        </View>
       </View>
       
       {/* Hidden WebView for speech recognition */}
@@ -677,14 +867,19 @@ export default function VoiceInputScreen() {
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback={true}
           startInLoadingState={true}
-          renderLoading={() => <ActivityIndicator size="large" color={colors.primary} />}
+          renderLoading={() => <ActivityIndicator size="large" color="#000000" />}
           onError={(syntheticEvent: any) => {
             console.error('WebView error:', syntheticEvent.nativeEvent);
           }}
         />
       </View>
       
-      <CapsuleMenu />
+      <TouchableOpacity 
+        style={styles.backButtonFloating}
+        onPress={() => router.back()}
+      >
+        <MaterialIcons name="arrow-back" size={24} color="#000000" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -692,44 +887,18 @@ export default function VoiceInputScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  rightHeaderSpace: {
-    width: 40,
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flex: 1,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
   },
   errorContainer: {
     justifyContent: 'center',
@@ -737,8 +906,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   errorText: {
-    marginBottom: 12,
     fontSize: 16,
+    textAlign: 'center',
+    marginVertical: 10,
+    marginHorizontal: 20,
   },
   permissionButton: {
     padding: 12,
@@ -749,39 +920,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  micStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  micStatusIndicator: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  micStatusText: {
-    fontSize: 16,
-  },
-  micButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  micButtonRecording: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
-  },
   statusText: {
-    fontSize: 16,
-    marginBottom: 40,
+    marginVertical: 20,
+    fontSize: 18,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  animationContainer: {
+    position: 'relative',
+    width: 300,
+    height: 300,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  voiceCircle: {
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  innerPulse: {
+    position: 'absolute',
+    backgroundColor: 'rgba(255, 0, 0, 0.3)',
   },
   webviewContainer: {
     position: 'absolute',
@@ -789,47 +953,54 @@ const styles = StyleSheet.create({
     width: 1,
     opacity: 0,
   },
-  createTaskButton: {
+  processingCapsule: {
+    position: 'absolute',
     flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: '#000000',
+    borderRadius: 25,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     justifyContent: 'center',
-    marginTop: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    width: '70%',
-    alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  createTaskText: {
-    marginLeft: 8,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  transcriptText: {
-    fontSize: 18,
-    lineHeight: 26,
-    textAlign: 'center',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginTop: 40,
-  },
-  actionButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    minWidth: 120,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+    zIndex: 10,
   },
-  actionButtonText: {
+  capsuleText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 10,
+  },
+  processingLabel: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  backButtonFloating: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 5,
+    zIndex: 100,
   },
 }); 
