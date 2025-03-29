@@ -8,9 +8,10 @@ type DateSliderProps = {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   onPressHeader?: () => void;
+  dates?: Date[];
 };
 
-export default function DateSlider({ selectedDate, onSelectDate, onPressHeader }: DateSliderProps) {
+export default function DateSlider({ selectedDate, onSelectDate, onPressHeader, dates: propDates }: DateSliderProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const scrollViewRef = useRef<ScrollView>(null);
@@ -19,14 +20,18 @@ export default function DateSlider({ selectedDate, onSelectDate, onPressHeader }
   const startOfCurrentWeek = startOfWeek(today);
   const [dates, setDates] = useState<Date[]>([]);
   
-  // Generate array of dates for the week
+  // Generate array of dates for the week if not provided via props
   useEffect(() => {
-    const weekDates = [];
-    for (let i = 0; i < 7; i++) {
-      weekDates.push(addDays(startOfCurrentWeek, i));
+    if (propDates && propDates.length > 0) {
+      setDates(propDates);
+    } else {
+      const weekDates = [];
+      for (let i = 0; i < 7; i++) {
+        weekDates.push(addDays(startOfCurrentWeek, i));
+      }
+      setDates(weekDates);
     }
-    setDates(weekDates);
-  }, []);
+  }, [propDates]);
   
   // Format day name (Mon, Tue, etc)
   const formatDayName = (date: Date) => {

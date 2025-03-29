@@ -16,15 +16,15 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
   
   // Determine which screen is active to highlight the icon
   const isHomeActive = currentPath === '/' || currentPath === '/index';
-  const isSettingsActive = currentPath === '/settings';
+  const isUpcomingActive = currentPath === '/upcoming';
   const isProfileActive = currentPath === '/profile';
   const isVoiceActive = currentPath === '/voice-input';
   
   const handleNavigate = (path: string) => {
     if (path === '/') {
       router.push('/');
-    } else if (path === '/settings') {
-      router.push('/settings');
+    } else if (path === '/upcoming') {
+      router.push('/upcoming');
     } else if (path === '/profile') {
       router.push('/profile');
     } else if (path === '/voice-input') {
@@ -58,12 +58,23 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
         
         <TouchableOpacity 
           style={styles.capsuleButton}
+          onPress={() => handleNavigate('/upcoming')}
+        >
+          <MaterialIcons 
+            name="event" 
+            size={24} 
+            color={isUpcomingActive ? colors.primary : colors.text} 
+          />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.addButtonWrapper, { backgroundColor: colors.primary }]}
           onPress={handleAddTask}
         >
           <MaterialIcons 
             name="add" 
-            size={24} 
-            color={colors.text} 
+            size={28} 
+            color="#FFFFFF" 
           />
         </TouchableOpacity>
         
@@ -86,17 +97,6 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
             name="person" 
             size={24} 
             color={isProfileActive ? colors.primary : colors.text} 
-          />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.capsuleButton}
-          onPress={() => handleNavigate('/settings')}
-        >
-          <MaterialIcons 
-            name="settings" 
-            size={24} 
-            color={isSettingsActive ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
       </View>
@@ -134,5 +134,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 8,
+  },
+  addButtonWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 5,
   },
 }); 

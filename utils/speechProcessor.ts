@@ -75,7 +75,7 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro-exp-03-25:free',
+        model: 'google/gemma-3-1b-it:free',
         messages: [
           {
             role: 'system',

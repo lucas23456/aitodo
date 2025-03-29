@@ -46,132 +46,20 @@ export default function TasksScreen() {
       return isSameDay(taskDate, selectedDateStart);
     });
     
-    // Group tasks by time of day - if no real tasks, use sample data
-    let morningTasks = tasksForSelectedDate.filter(task => !task.completed).slice(0, 3);
-    let afternoonTasks = tasksForSelectedDate.filter(task => !task.completed).slice(3, 6);
-    let eveningTasks = tasksForSelectedDate.filter(task => !task.completed).slice(6, 9);
-    
-    // If we don't have actual tasks, create sample data
-    if (tasksForSelectedDate.length === 0) {
-      // Morning samples
-      morningTasks = [
-        {
-          id: 'm1',
-          title: 'design user registration process',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Work',
-          tags: ['Design'],
-          priority: 'high',
-          estimatedTime: '50 min',
-          company: '@coinbase'
-        },
-        {
-          id: 'm2',
-          title: 'review and provide feedback on the wireframes for the new design concept',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Design',
-          tags: ['Feedback'],
-          priority: 'medium',
-          estimatedTime: '45 min',
-          company: '@apple'
-        },
-        {
-          id: 'm3',
-          title: 'mood board for the ecommerce template',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Design',
-          tags: ['Moodboard'],
-          priority: 'low',
-          estimatedTime: '30 min',
-          company: '@shopify'
-        }
-      ] as Task[];
-      
-      // Afternoon samples
-      afternoonTasks = [
-        {
-          id: 'a1',
-          title: 'finalize color palette and typography',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Design',
-          tags: ['Color'],
-          priority: 'medium',
-          estimatedTime: '25 min',
-          company: '@apple'
-        },
-        {
-          id: 'a2',
-          title: 'analyze user feedback and suggest improvements',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Research',
-          tags: ['Feedback'],
-          priority: 'high',
-          estimatedTime: '60 min',
-          company: '@insurance'
-        },
-        {
-          id: 'a3',
-          title: 'evaluate two potential website layouts',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Design',
-          tags: ['Layout'],
-          priority: 'medium', 
-          estimatedTime: '45 min',
-          company: '@shopify'
-        }
-      ] as Task[];
-      
-      // Evening samples
-      eveningTasks = [
-        {
-          id: 'e1',
-          title: 'identity project',
-          description: '',
-          dueDate: new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: 'Design',
-          tags: ['Identity'],
-          priority: 'medium',
-          estimatedTime: '45 min',
-          company: '@coinbase'
-        }
-      ] as Task[];
-    }
-    
+    // Group tasks by completion status
+    const incompleteTasks = tasksForSelectedDate.filter(task => !task.completed);
     const completedTasks = tasksForSelectedDate.filter(task => task.completed);
     
-    // Sort by priority
-    const sortByPriority = (a: Task, b: Task) => {
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
-      const priorityA = priorityOrder[a.priority] || 1;
-      const priorityB = priorityOrder[b.priority] || 1;
-      return priorityA - priorityB;
-    };
+    // Group incomplete tasks by time of day
+    const morningTasks = incompleteTasks.filter((_, index) => index < 3);
+    const afternoonTasks = incompleteTasks.filter((_, index) => index >= 3 && index < 6);
+    const eveningTasks = incompleteTasks.filter((_, index) => index >= 6 && index < 9);
     
     return {
-      morning: [...morningTasks].sort(sortByPriority),
-      afternoon: [...afternoonTasks].sort(sortByPriority),
-      evening: [...eveningTasks].sort(sortByPriority),
-      completed: [...completedTasks]
+      morning: morningTasks,
+      afternoon: afternoonTasks,
+      evening: eveningTasks,
+      completed: completedTasks
     };
   }, [tasks, selectedDate]);
   
@@ -193,11 +81,19 @@ export default function TasksScreen() {
   };
   
   const handleSubmitTask = (task: Omit<Task, 'id' | 'createdAt'>) => {
+    // Make sure we have a due date (default to current date if none provided)
+    const taskWithDate = {
+      ...task,
+      dueDate: task.dueDate || new Date().toISOString()
+    };
+    
     if (selectedTask) {
-      updateTask({ ...selectedTask, ...task });
+      updateTask({ ...selectedTask, ...taskWithDate });
     } else {
-      addTask(task);
+      addTask(taskWithDate);
     }
+    
+    setIsFormVisible(false);
   };
   
   const handleDateSelect = (date: Date) => {
@@ -226,8 +122,11 @@ export default function TasksScreen() {
       title: 'Completed',
       data: filteredAndSortedTasks.completed
     }
-  ].filter(section => section.data.length > 0); // Only show sections with tasks
+  ].filter(section => section.data.length > 0);
   
+  // Check if there are no tasks for the selected date
+  const noTasksForSelectedDate = sectionListData.every(section => section.data.length === 0);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
@@ -258,44 +157,29 @@ export default function TasksScreen() {
         onPressHeader={handleCalendarPress}
       />
       
-      {/* Task List */}
-      {tasks.length === 0 && sectionListData.length === 0 ? (
-        <EmptyState />
+      {/* Tasks list or empty state */}
+      {noTasksForSelectedDate ? (
+        <EmptyState message="No tasks for this day. Add a new task!" />
       ) : (
-        <>
-          {sectionListData.length === 0 ? (
-            <View style={styles.emptyDateContainer}>
-              <Text style={[styles.emptyDateText, { color: colors.gray }]}>
-                No tasks scheduled for this date
-              </Text>
-            </View>
-          ) : (
-            <SectionList
-              sections={sectionListData}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TaskItem
-                  task={item}
-                  onToggleComplete={toggleTaskStatus}
-                  onDelete={deleteTask}
-                  onPress={handleTaskPress}
-                />
-              )}
-              renderSectionHeader={({ section: { title } }) => (
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionIcon}>
-                    <Text style={[styles.sectionIconText, { color: colors.secondaryText }]}>
-                      {title === 'Morning' ? '☀️' : title === 'Afternoon' ? '🌤️' : '🌙'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{title}</Text>
-                </View>
-              )}
-              contentContainerStyle={styles.listContent}
-              stickySectionHeadersEnabled={false}
+        <SectionList
+          sections={sectionListData}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TaskItem
+              task={item}
+              onToggleComplete={toggleTaskStatus}
+              onDelete={deleteTask}
+              onPress={handleTaskPress}
             />
           )}
-        </>
+          renderSectionHeader={({ section: { title } }) => (
+            <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={true}
+          contentContainerStyle={styles.listContent}
+        />
       )}
       
       <CapsuleMenu onAddPress={handleAddTask} />

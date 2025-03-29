@@ -37,6 +37,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="upcoming"
+        options={{
+          title: 'Upcoming',
+          tabBarIcon: ({ color }) => <TabBarIcon name="event" color={color} />,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',

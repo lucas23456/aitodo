@@ -11,51 +11,22 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import Colors from '@/constants/Colors';
-import { useTodoStore } from '@/store/todoStore';
+import { useTodoStore, Project } from '@/store/todoStore';
 import { useColorScheme } from '@/components/useColorScheme';
 import CapsuleMenu from '@/components/CapsuleMenu';
-
-// Define project type
-type Project = {
-  id: string;
-  name: string;
-  description: string;
-  color: string;
-  taskCount: number;
-};
-
-// Sample projects
-const sampleProjects: Project[] = [
-  {
-    id: '1',
-    name: 'Personal',
-    description: 'Tasks for personal life',
-    color: '#444444',
-    taskCount: 5
-  },
-  {
-    id: '2',
-    name: 'Work',
-    description: 'Professional tasks and deadlines',
-    color: '#000000',
-    taskCount: 12
-  },
-  {
-    id: '3',
-    name: 'Health',
-    description: 'Exercise and wellness goals',
-    color: '#666666',
-    taskCount: 3
-  }
-];
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const isDarkMode = useTodoStore((state) => state.isDarkMode);
   const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
-  const [projects, setProjects] = useState<Project[]>(sampleProjects);
+  const projects = useTodoStore((state) => state.projects);
+  const tasks = useTodoStore((state) => state.tasks);
+  const addProject = useTodoStore((state) => state.addProject);
+  const deleteProject = useTodoStore((state) => state.deleteProject);
+  
   const [newProjectModalVisible, setNewProjectModalVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
@@ -63,15 +34,13 @@ export default function ProfileScreen() {
   // Add a new project
   const handleAddProject = () => {
     if (newProjectName.trim()) {
-      const newProject: Project = {
-        id: Date.now().toString(),
+      const newProject = {
         name: newProjectName.trim(),
         description: newProjectDescription.trim(),
         color: '#' + Math.floor(Math.random() * 16777215).toString(16), // Random color
-        taskCount: 0
       };
       
-      setProjects([...projects, newProject]);
+      addProject(newProject);
       setNewProjectName('');
       setNewProjectDescription('');
       setNewProjectModalVisible(false);
@@ -80,7 +49,25 @@ export default function ProfileScreen() {
   
   // Delete a project
   const handleDeleteProject = (id: string) => {
-    setProjects(projects.filter(project => project.id !== id));
+    deleteProject(id);
+  };
+
+  // Navigate to project details
+  const handleViewProject = (project: Project) => {
+    router.push({
+      pathname: '/project-details',
+      params: { id: project.id }
+    });
+  };
+  
+  // Get task count for a project
+  const getProjectTaskCount = (projectId: string) => {
+    return tasks.filter(task => task.projectId === projectId).length;
+  };
+  
+  // Get total completed task count
+  const getCompletedTaskCount = () => {
+    return tasks.filter(task => task.completed).length;
   };
   
   return (
@@ -116,7 +103,7 @@ export default function ProfileScreen() {
             
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.text }]}>
-                {projects.reduce((sum, project) => sum + project.taskCount, 0)}
+                {tasks.length}
               </Text>
               <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Tasks</Text>
             </View>
@@ -124,7 +111,7 @@ export default function ProfileScreen() {
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             
             <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.text }]}>5</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{getCompletedTaskCount()}</Text>
               <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Completed</Text>
             </View>
           </View>
@@ -141,37 +128,49 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
         
-        {projects.map(project => (
-          <View 
-            key={project.id} 
-            style={[styles.projectCard, { backgroundColor: colors.card }]}
-          >
-            <View style={styles.projectHeader}>
-              <View style={[styles.projectColor, { backgroundColor: project.color }]} />
-              <Text style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
-              <TouchableOpacity onPress={() => handleDeleteProject(project.id)}>
-                <MaterialIcons name="delete-outline" size={22} color={colors.secondaryText} />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[styles.projectDescription, { color: colors.secondaryText }]}>
-              {project.description}
+        {projects.length === 0 ? (
+          <View style={[styles.emptyProjectsCard, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="folder" size={48} color={colors.secondaryText} />
+            <Text style={[styles.emptyProjectsText, { color: colors.secondaryText }]}>
+              No projects yet. Create your first project!
             </Text>
-            
-            <View style={styles.projectFooter}>
-              <View style={styles.projectStat}>
-                <MaterialIcons name="assignment" size={16} color={colors.secondaryText} />
-                <Text style={[styles.projectStatText, { color: colors.secondaryText }]}>
-                  {project.taskCount} tasks
-                </Text>
+          </View>
+        ) : (
+          projects.map(project => (
+            <View 
+              key={project.id} 
+              style={[styles.projectCard, { backgroundColor: colors.card }]}
+            >
+              <View style={styles.projectHeader}>
+                <View style={[styles.projectColor, { backgroundColor: project.color }]} />
+                <Text style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
+                <TouchableOpacity onPress={() => handleDeleteProject(project.id)}>
+                  <MaterialIcons name="delete-outline" size={22} color={colors.secondaryText} />
+                </TouchableOpacity>
               </View>
               
-              <TouchableOpacity style={styles.viewProjectButton}>
-                <Text style={[styles.viewProjectText, { color: colors.primary }]}>View</Text>
-              </TouchableOpacity>
+              <Text style={[styles.projectDescription, { color: colors.secondaryText }]}>
+                {project.description}
+              </Text>
+              
+              <View style={styles.projectFooter}>
+                <View style={styles.projectStat}>
+                  <MaterialIcons name="assignment" size={16} color={colors.secondaryText} />
+                  <Text style={[styles.projectStatText, { color: colors.secondaryText }]}>
+                    {getProjectTaskCount(project.id)} tasks
+                  </Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.viewProjectButton}
+                  onPress={() => handleViewProject(project)}
+                >
+                  <Text style={[styles.viewProjectText, { color: colors.primary }]}>View</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ))}
+          ))
+        )}
       </ScrollView>
       
       {/* New Project Modal */}
@@ -458,5 +457,17 @@ const styles = StyleSheet.create({
   addProjectButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  emptyProjectsCard: {
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyProjectsText: {
+    fontSize: 16,
+    marginTop: 12,
+    textAlign: 'center',
   },
 }); 

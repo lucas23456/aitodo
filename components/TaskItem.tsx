@@ -13,9 +13,10 @@ type TaskItemProps = {
   onToggleComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onPress: (task: Task) => void;
+  onEdit?: (task: Task) => void;
 };
 
-export default function TaskItem({ task, onToggleComplete, onDelete, onPress }: TaskItemProps) {
+export default function TaskItem({ task, onToggleComplete, onDelete, onPress, onEdit }: TaskItemProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   
@@ -131,6 +132,26 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress }: 
             >
               {task.title}
             </Text>
+            
+            {/* Show description if available */}
+            {task.description ? (
+              <Text 
+                style={[styles.taskDescription, { color: colors.secondaryText }]}
+                numberOfLines={1}
+              >
+                {task.description}
+              </Text>
+            ) : null}
+            
+            {/* Show due date in a more visible way */}
+            {task.dueDate ? (
+              <View style={styles.dateContainer}>
+                <MaterialIcons name="event" size={12} color={colors.secondaryText} />
+                <Text style={[styles.dateText, { color: colors.secondaryText }]}>
+                  {formatDueDate(task.dueDate)}
+                </Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
         </View>
         
@@ -383,5 +404,18 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
+  },
+  taskDescription: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  dateText: {
+    fontSize: 12,
+    marginLeft: 4,
   },
 }); 

@@ -788,7 +788,7 @@ export default function VoiceInputScreen() {
         {/* Voice recording status text */}
         <Text style={styles.statusText}>
           {processingTask ? 
-            processingState === 'parsing' ? 'Обработка текста...' :
+            processingState === 'parsing' ? '' :
             processingState === 'creating' ? 'Создание задачи...' :
             processingState === 'error' ? 'Произошла ошибка...' :
             'Обработка...' 
