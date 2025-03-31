@@ -15,11 +15,8 @@ interface LLMTaskResponse {
 interface ProcessedTask {
   title: string;
   description?: string;
-  tags?: string[];
   priority?: 'low' | 'medium' | 'high';
   dueDate?: string;
-  category?: string;
-  estimatedTime?: string;
 }
 
 /**
@@ -39,14 +36,11 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       1. Название (краткое, понятное)
       2. Добавь один подходящий эмодзи в начало названия каждой задачи
       3. Описание (опционально, если есть детали)
-      4. Тег (ТОЛЬКО ОДИН наиболее подходящий тег: 💻 работа, 🧠 личное, 🛍️ покупки, 💪 здоровье, 📚 учеба и т.д.)
-      5. Приоритет (high, medium, low - определи исходя из срочности)
-      6. Срок выполнения (если упоминается дата или время, определи timestamp)
-      7. Категория (опционально, например "Работа", "Личное", "Шоппинг")
-      8. Оценка времени (опционально, например "15 min", "1 час", "2 часа")
+      4. Приоритет (high, medium, low - определи исходя из срочности)
+      5. Срок выполнения (если упоминается конкретная дата, используй её. Если не упоминается - используй сегодняшнюю дату)
       
       Текст может содержать несколько задач, разбей их правильно.
-      Важно: выбери только один самый подходящий тег для каждой задачи.
+      ВАЖНО: Для всех задач, если срок явно не указан, поставь сегодняшнюю дату.
       Возвращай только JSON-массив с задачами, без преамбул и пояснений.
 
       Формат ответа:
@@ -54,11 +48,8 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         {
           "title": "🛒 Название задачи с эмодзи",
           "description": "Описание задачи (если есть)",
-          "tags": ["только_один_тег"],
           "priority": "high|medium|low",
-          "dueDate": "2023-04-15T14:00:00.000Z", // ISO формат даты, если упоминается срок
-          "category": "категория задачи (если есть)",
-          "estimatedTime": "15 min" // примерное время на выполнение (если есть)
+          "dueDate": "${new Date().toISOString()}" // Используй этот формат с текущей датой по умолчанию
         },
         // другие задачи
       ]
@@ -75,7 +66,7 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'moonshotai/moonlight-16b-a3b-instruct:free',
+        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
         messages: [
           {
             role: 'system',
@@ -113,8 +104,10 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       let jsonString = content.trim();
       let tasks: LLMTaskResponse[] = [];
 
-      // Пытаемся извлечь JSON массив из текста
+      // Пытаемся извлечь JSON массив из текста разными способами
       try {
+        console.log('Raw LLM output:', jsonString);
+        
         // Если вернулся объект с tasks как массивом
         if (jsonString.startsWith('{') && jsonString.includes('"tasks"')) {
           const jsonObj = JSON.parse(jsonString);
@@ -128,21 +121,42 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         }
         // Если в тексте есть что-то похожее на массив JSON
         else {
-          const jsonMatch = content.match(/\[[\s\S]*?\]/);
+          const jsonMatch = content.match(/\[\s*{[\s\S]*}\s*\]/);
           if (jsonMatch) {
             tasks = JSON.parse(jsonMatch[0]);
           }
         }
       } catch (jsonError) {
         console.error('Initial JSON parsing failed:', jsonError);
-        // Если начальный парсинг не удался, применяем альтернативный подход
+        // Более агрессивный подход к извлечению JSON
         try {
-          // Убираем все, что не похоже на JSON
-          jsonString = jsonString.replace(/^[^[\{]+/, '').replace(/[^\]\}]+$/, '');
-          tasks = JSON.parse(jsonString);
-        } catch (fallbackError) {
-          console.error('Fallback JSON parsing failed:', fallbackError);
-          throw fallbackError; // пробрасываем ошибку дальше
+          // Попробуем найти любые объекты в фигурных скобках
+          const objectMatches = content.match(/{[^{}]*(((?:{[^{}]*})[^{}]*)+|[^{}]*)}+/g);
+          if (objectMatches && objectMatches.length > 0) {
+            // Создаем массив из найденных объектов
+            const objectsJson = `[${objectMatches.join(',')}]`;
+            console.log('Constructed JSON array:', objectsJson);
+            try {
+              tasks = JSON.parse(objectsJson);
+            } catch (e) {
+              // Возможно у нас невалидный JSON - попробуем исправить простые проблемы
+              const cleanedJson = objectsJson
+                .replace(/,\s*}/g, '}') // Убрать запятые перед закрывающей скобкой
+                .replace(/,\s*\]/g, ']'); // Убрать запятые перед закрывающей квадратной скобкой
+              tasks = JSON.parse(cleanedJson);
+            }
+          } else {
+            throw new Error('No valid JSON objects found');
+          }
+        } catch (aggressiveError) {
+          console.error('Aggressive JSON extraction failed:', aggressiveError);
+          
+          // Последняя попытка - просто создаем базовую задачу с текстом ответа LLM
+          console.log('Creating simple task based on LLM response');
+          tasks = [{
+            title: content.length > 50 ? `${content.substring(0, 50)}...` : content,
+            description: content
+          }];
         }
       }
       
@@ -154,16 +168,36 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       
       // Преобразуем форматы данных, чтобы они соответствовали ожидаемому формату
       return tasks.map(task => {
+        // Определяем дату выполнения, устанавливая сегодня по умолчанию
+        const today = new Date();
+        let dueDate;
+        
+        // Если указана дата в задаче, пробуем её использовать
+        if (task.dueDate || task.due_date) {
+          try {
+            // Пробуем создать дату из указанного значения
+            const parsedDate = new Date(task.dueDate || task.due_date || '');
+            // Проверяем, что получилась корректная дата
+            if (!isNaN(parsedDate.getTime())) {
+              dueDate = parsedDate.toISOString();
+            } else {
+              // Если некорректная дата, используем сегодня
+              dueDate = today.toISOString();
+            }
+          } catch (e) {
+            // При ошибке парсинга используем сегодня
+            dueDate = today.toISOString();
+          }
+        } else {
+          // Если дата не указана, используем сегодня
+          dueDate = today.toISOString();
+        }
+        
         const processedTask: ProcessedTask = {
           title: task.title || '',
           description: task.description || '',
-          tags: Array.isArray(task.tags) ? task.tags : (task.tags ? [task.tags] : ['Voice']),
           priority: ['low', 'medium', 'high'].includes(task.priority as string) ? task.priority as 'low' | 'medium' | 'high' : 'medium',
-          dueDate: (task.dueDate || task.due_date) ? 
-            new Date(task.dueDate || task.due_date || '').toISOString() : 
-            new Date().toISOString(),
-          category: task.category || 'Voice Input',
-          estimatedTime: task.estimatedTime || '15 min'
+          dueDate: dueDate
         };
         
         // Проверяем наличие эмодзи, если нет - добавляем стандартное
@@ -179,11 +213,8 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       return [{
         title: `📝 ${text}`,
         description: '',
-        tags: ['Voice'],
         priority: 'medium',
-        dueDate: new Date().toISOString(),
-        category: 'Voice Input',
-        estimatedTime: '15 min'
+        dueDate: new Date().toISOString()
       }];
     }
   } catch (error) {
@@ -192,11 +223,8 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
     return [{
       title: `📝 ${text}`,
       description: '',
-      tags: ['Voice'],
       priority: 'medium',
-      dueDate: new Date().toISOString(),
-      category: 'Voice Input',
-      estimatedTime: '15 min'
+      dueDate: new Date().toISOString()
     }];
   }
 } 

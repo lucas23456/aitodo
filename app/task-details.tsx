@@ -93,6 +93,18 @@ export default function TaskDetailsScreen() {
         <View style={styles.titleContainer}>
           <Text style={[styles.title, { color: colors.text }]}>{task.title}</Text>
           
+        </View>
+        
+        
+        {/* Description section */}
+        {task.description && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Description</Text>
+            <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
+              <Text style={[styles.description, { color: colors.text }]}>{task.description}</Text>
+            </View>
+          </View>
+        )}
           <TouchableOpacity
             style={[
               styles.statusButton,
@@ -114,22 +126,13 @@ export default function TaskDetailsScreen() {
               {task.completed ? "Completed" : "Mark as Complete"}
             </Text>
           </TouchableOpacity>
-        </View>
-        
-        
-        {/* Description section */}
-        {task.description && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Description</Text>
-            <View style={[styles.descriptionCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.description, { color: colors.text }]}>{task.description}</Text>
-            </View>
-          </View>
-        )}
 
-                {/* Task details */}
-                <View style={styles.section}>
+          {/* Task details */}
+          <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Details</Text>
+          
+
+
           
           <View style={[styles.detailsCard, { backgroundColor: colors.card }]}>
             <View style={styles.detailRow}>
@@ -138,6 +141,7 @@ export default function TaskDetailsScreen() {
                 Due: {formattedDate}
               </Text>
             </View>
+            
             
             <View style={styles.detailRow}>
               <MaterialIcons name="flag" size={20} color={colors.primary} />

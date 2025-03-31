@@ -25,40 +25,66 @@ const updateTasksWithNewTask = async (newTask: any) => {
     let tasks = useTodoStore.getState().tasks || [];
     console.log('Current tasks before update:', tasks.length);
     
-    // Добавляем новую задачу
-    tasks = [...tasks, newTask];
-    
-    // Сохраняем обновленный список задач в AsyncStorage
-    console.log('Saving tasks to AsyncStorage:', tasks.length);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    // Добавляем новую задачу и создаем новый массив
+    const updatedTasks = [...tasks, newTask];
     
     // Обновляем состояние хранилища напрямую
-    useTodoStore.setState({ tasks });
+    useTodoStore.setState({ tasks: updatedTasks });
+    console.log('Store updated with new task, new count:', updatedTasks.length);
     
-    console.log('Tasks updated successfully, new count:', tasks.length);
+    // Затем сохраняем в AsyncStorage
+    console.log('Saving updated tasks to AsyncStorage...');
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTasks));
+    console.log('Tasks successfully saved to AsyncStorage');
+    
+    // Возвращаем успех
+    return true;
   } catch (error) {
-    console.error('Error updating tasks:', error);
+    console.error('Error updating tasks in primary method:', error);
     
-    // В случае ошибки, попробуем альтернативный подход
+    // В случае ошибки, используем резервный подход через AsyncStorage
     try {
-      // Получим текущее состояние из AsyncStorage
+      console.log('Attempting fallback method via AsyncStorage...');
+      // Получаем текущие задачи из AsyncStorage напрямую
       const storedTasksJson = await AsyncStorage.getItem(STORAGE_KEY);
-      let tasks = [];
+      let storedTasks = [];
       
       if (storedTasksJson) {
-        tasks = JSON.parse(storedTasksJson);
+        storedTasks = JSON.parse(storedTasksJson);
+        console.log('Retrieved', storedTasks.length, 'tasks from AsyncStorage');
+      } else {
+        console.log('No existing tasks found in AsyncStorage');
       }
       
       // Добавляем новую задачу
-      tasks.push(newTask);
+      storedTasks.push(newTask);
+      console.log('Added new task to retrieved tasks');
       
-      // Сохраняем и обновляем
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-      useTodoStore.setState({ tasks });
+      // Сохраняем обновленный список обратно в AsyncStorage
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(storedTasks));
+      console.log('Saved', storedTasks.length, 'tasks to AsyncStorage');
       
-      console.log('Tasks updated via fallback method, new count:', tasks.length);
+      // И обновляем состояние хранилища
+      useTodoStore.setState({ tasks: storedTasks });
+      console.log('Store updated with tasks from AsyncStorage');
+      
+      // Возвращаем успех
+      return true;
     } catch (fallbackError) {
-      console.error('Critical error updating tasks, even fallback failed:', fallbackError);
+      console.error('Critical error in fallback method:', fallbackError);
+      
+      // Последняя попытка - сохраняем только новую задачу в пустой массив
+      try {
+        console.log('Last resort: saving only the new task...');
+        const singleTaskArray = [newTask];
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(singleTaskArray));
+        useTodoStore.setState({ tasks: singleTaskArray });
+        console.log('Successfully saved single task as last resort');
+        return true;
+      } catch (finalError) {
+        console.error('All methods failed to save task:', finalError);
+        return false;
+      }
     }
   }
 };
@@ -688,45 +714,66 @@ export default function VoiceInputScreen() {
       // Показываем анимацию обработки
       setProcessingState('parsing');
       
+      // Делаем копию транскрипта на случай потери данных
+      const safeTranscript = transcript.trim();
+      console.log('Processing voice input:', safeTranscript);
+      
       // Обрабатываем входящий текст через нейросеть
-      const processedTasks = await processVoiceText(transcript.trim());
-      console.log('Processed tasks:', processedTasks);
+      let processedTasks = [];
+      try {
+        processedTasks = await processVoiceText(safeTranscript);
+        console.log('Processed tasks:', processedTasks);
+      } catch (processError) {
+        console.error('Error processing voice text:', processError);
+        throw processError; // пробрасываем ошибку для обработки в блоке catch
+      }
       
       // Меняем состояние обработки
       setProcessingState('creating');
       
-      if (processedTasks.length === 0) {
-        // Если нет задач, создаем базовую задачу
-        createBasicTask(transcript.trim());
-        return;
+      if (!processedTasks || processedTasks.length === 0) {
+        console.log('No tasks returned, creating basic task');
+        throw new Error('No tasks returned from processor');
       }
+      
+      // Подготовка для отслеживания успешного добавления
+      let addedTasksCount = 0;
       
       // Добавляем каждую обработанную задачу
       for (const task of processedTasks) {
-        // Преобразуем в формат, ожидаемый addTask
-        const newTask = {
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          title: task.title,
-          description: task.description || '',
-          dueDate: task.dueDate || new Date().toISOString(),
-          completed: false,
-          createdAt: new Date().toISOString(),
-          category: task.category || 'Voice Input',
-          priority: task.priority || 'medium',
-          tags: task.tags || ['Voice'],
-          estimatedTime: task.estimatedTime || '15 min'
-        };
-        
-        // Добавляем задачу с помощью нашей новой функции
-        await updateTasksWithNewTask(newTask);
-        console.log('Added task to store:', newTask);
+        try {
+          // Преобразуем в формат, ожидаемый addTask
+          const newTask = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+            title: task.title || safeTranscript,
+            description: task.description || '',
+            dueDate: new Date().toISOString(),
+            completed: false,
+            createdAt: new Date().toISOString(),
+            priority: task.priority || 'medium'
+          };
+          
+          // Добавляем задачу с помощью нашей новой функции
+          await updateTasksWithNewTask(newTask);
+          console.log('Added task to store:', newTask.title);
+          addedTasksCount++;
+        } catch (addError) {
+          console.error('Error adding individual task:', addError);
+          // Продолжаем с другими задачами вместо прерывания всего процесса
+        }
+      }
+      
+      // Проверяем, была ли добавлена хотя бы одна задача
+      if (addedTasksCount === 0) {
+        console.warn('No tasks were successfully added, falling back to basic task');
+        throw new Error('Failed to add any tasks');
       }
       
       // Сбрасываем состояние обработки
       setProcessingState('completed');
       
       // Показываем сообщение об успехе
-      const taskCount = processedTasks.length;
+      const taskCount = addedTasksCount;
       Alert.alert(
         taskCount > 1 ? 'Задачи созданы' : 'Задача создана',
         taskCount > 1 
@@ -746,8 +793,8 @@ export default function VoiceInputScreen() {
         ]
       );
     } catch (error) {
-      console.error('Error processing voice task:', error);
-      // В случае ошибки создаем базовую задачу
+      console.error('Error in voice task creation flow:', error);
+      // В случае ошибки создаем базовую задачу с оригинальным текстом
       setProcessingState('error');
       createBasicTask(transcript.trim());
     }
@@ -758,18 +805,15 @@ export default function VoiceInputScreen() {
     const today = new Date();
     const taskTitle = text;
     
-    // Создаем простую задачу с текстом как заголовком
+    // Создаем простую задачу с текстом как заголовком и сегодняшней датой
     const newTask = {
       id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       title: `📝 ${taskTitle}`,
       description: '',
-      dueDate: today.toISOString(),
+      dueDate: today.toISOString(), // Гарантируем использование сегодняшней даты
       completed: false,
-      createdAt: new Date().toISOString(),
-      category: 'Voice Input',
-      priority: 'medium' as 'low' | 'medium' | 'high',
-      tags: ['Voice'],
-      estimatedTime: '15 min'
+      createdAt: today.toISOString(),
+      priority: 'medium' as 'low' | 'medium' | 'high'
     };
     
     // Добавляем задачу с помощью нашей новой функции

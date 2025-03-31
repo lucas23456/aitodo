@@ -64,14 +64,26 @@ export default function TasksScreen() {
   const filteredAndSortedTasks = useMemo(() => {
     // Get today's date
     const today = startOfDay(new Date());
+    console.log('Today is:', today.toISOString());
     
     // Filter tasks for today
     const todaysTasks = tasks.filter(task => {
       if (!task.dueDate) return false;
       
       const taskDate = startOfDay(new Date(task.dueDate));
-      return isSameDay(taskDate, today);
+      const isTaskToday = isSameDay(taskDate, today);
+      
+      // Отладочная информация для отслеживания проблем с отображением задач
+      if (isTaskToday) {
+        console.log(`Task "${task.title}" IS for today, date: ${taskDate.toISOString()}`);
+      } else {
+        console.log(`Task "${task.title}" is NOT for today, date: ${taskDate.toISOString()}`);
+      }
+      
+      return isTaskToday;
     });
+    
+    console.log('Total today tasks found:', todaysTasks.length);
     
     // Group tasks by completion status
     const incompleteTasks = todaysTasks.filter(task => !task.completed);
