@@ -4,6 +4,7 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import CapsuleMenu from '@/components/CapsuleMenu';
@@ -11,6 +12,56 @@ import { useTodoStore } from '@/store/todoStore';
 import * as Permissions from 'expo-permissions';
 import { Audio } from 'expo-av';
 import { processVoiceText } from '@/utils/speechProcessor';
+
+// Константы для хранения данных
+const STORAGE_KEY = '@todo_app_tasks';
+const PROJECTS_KEY = '@todo_app_projects';
+const DARK_MODE_KEY = '@todo_app_dark_mode';
+
+// Обновить список задач, сохранив их в AsyncStorage и обновив store
+const updateTasksWithNewTask = async (newTask: any) => {
+  try {
+    // Получаем текущие задачи напрямую из store
+    let tasks = useTodoStore.getState().tasks || [];
+    console.log('Current tasks before update:', tasks.length);
+    
+    // Добавляем новую задачу
+    tasks = [...tasks, newTask];
+    
+    // Сохраняем обновленный список задач в AsyncStorage
+    console.log('Saving tasks to AsyncStorage:', tasks.length);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    
+    // Обновляем состояние хранилища напрямую
+    useTodoStore.setState({ tasks });
+    
+    console.log('Tasks updated successfully, new count:', tasks.length);
+  } catch (error) {
+    console.error('Error updating tasks:', error);
+    
+    // В случае ошибки, попробуем альтернативный подход
+    try {
+      // Получим текущее состояние из AsyncStorage
+      const storedTasksJson = await AsyncStorage.getItem(STORAGE_KEY);
+      let tasks = [];
+      
+      if (storedTasksJson) {
+        tasks = JSON.parse(storedTasksJson);
+      }
+      
+      // Добавляем новую задачу
+      tasks.push(newTask);
+      
+      // Сохраняем и обновляем
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      useTodoStore.setState({ tasks });
+      
+      console.log('Tasks updated via fallback method, new count:', tasks.length);
+    } catch (fallbackError) {
+      console.error('Critical error updating tasks, even fallback failed:', fallbackError);
+    }
+  }
+};
 
 export default function VoiceInputScreen() {
   const colorScheme = useColorScheme();
@@ -639,6 +690,7 @@ export default function VoiceInputScreen() {
       
       // Обрабатываем входящий текст через нейросеть
       const processedTasks = await processVoiceText(transcript.trim());
+      console.log('Processed tasks:', processedTasks);
       
       // Меняем состояние обработки
       setProcessingState('creating');
@@ -653,18 +705,21 @@ export default function VoiceInputScreen() {
       for (const task of processedTasks) {
         // Преобразуем в формат, ожидаемый addTask
         const newTask = {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
           title: task.title,
           description: task.description || '',
           dueDate: task.dueDate || new Date().toISOString(),
           completed: false,
+          createdAt: new Date().toISOString(),
           category: task.category || 'Voice Input',
           priority: task.priority || 'medium',
           tags: task.tags || ['Voice'],
           estimatedTime: task.estimatedTime || '15 min'
         };
         
-        // Добавляем задачу
-        addTask(newTask);
+        // Добавляем задачу с помощью нашей новой функции
+        await updateTasksWithNewTask(newTask);
+        console.log('Added task to store:', newTask);
       }
       
       // Сбрасываем состояние обработки
@@ -684,7 +739,8 @@ export default function VoiceInputScreen() {
               setTranscript('');
               setProcessingTask(false);
               setProcessingState('idle');
-              router.push('/');
+              // Используем replace вместо push для обновления состояния экрана
+              router.replace('/');
             }
           }
         ]
@@ -698,24 +754,27 @@ export default function VoiceInputScreen() {
   };
   
   // Вспомогательная функция для создания базовой задачи (запасной вариант)
-  const createBasicTask = (text: string) => {
+  const createBasicTask = async (text: string) => {
     const today = new Date();
     const taskTitle = text;
     
     // Создаем простую задачу с текстом как заголовком
     const newTask = {
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
       title: `📝 ${taskTitle}`,
       description: '',
       dueDate: today.toISOString(),
       completed: false,
+      createdAt: new Date().toISOString(),
       category: 'Voice Input',
       priority: 'medium' as 'low' | 'medium' | 'high',
       tags: ['Voice'],
       estimatedTime: '15 min'
     };
     
-    // Добавляем задачу
-    addTask(newTask);
+    // Добавляем задачу с помощью нашей новой функции
+    await updateTasksWithNewTask(newTask);
+    console.log('Added basic task to store:', newTask);
     
     // Показываем сообщение об успехе
     Alert.alert(
@@ -727,7 +786,8 @@ export default function VoiceInputScreen() {
           onPress: () => {
             setTranscript('');
             setProcessingTask(false);
-            router.push('/');
+            // Используем replace вместо push для обновления состояния экрана
+            router.replace('/');
           }
         }
       ]

@@ -112,7 +112,7 @@ export default function UpcomingScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Upcoming</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>upcoming</Text>
           <TouchableOpacity 
             style={[styles.calendarButton, { backgroundColor: colors.card }]}
             onPress={handleCalendarPress}
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 25,
     paddingBottom: 8,
   },
   headerTitleContainer: {

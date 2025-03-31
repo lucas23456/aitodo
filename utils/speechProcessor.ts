@@ -75,7 +75,7 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemma-3-1b-it:free',
+        model: 'moonshotai/moonlight-16b-a3b-instruct:free',
         messages: [
           {
             role: 'system',
@@ -86,6 +86,9 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
             content: text,
           },
         ],
+        response_format: { type: "json_object" },
+        max_tokens: 1000,
+        temperature: 0.2
       }),
     });
 
@@ -107,10 +110,47 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
     // Парсим JSON из ответа
     try {
       // Попробуем найти JSON в ответе, если модель вернет текст с пояснениями
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      const jsonString = jsonMatch ? jsonMatch[0] : content;
+      let jsonString = content.trim();
+      let tasks: LLMTaskResponse[] = [];
+
+      // Пытаемся извлечь JSON массив из текста
+      try {
+        // Если вернулся объект с tasks как массивом
+        if (jsonString.startsWith('{') && jsonString.includes('"tasks"')) {
+          const jsonObj = JSON.parse(jsonString);
+          if (Array.isArray(jsonObj.tasks)) {
+            tasks = jsonObj.tasks;
+          }
+        } 
+        // Если вернулся массив напрямую
+        else if (jsonString.startsWith('[') && jsonString.endsWith(']')) {
+          tasks = JSON.parse(jsonString);
+        }
+        // Если в тексте есть что-то похожее на массив JSON
+        else {
+          const jsonMatch = content.match(/\[[\s\S]*?\]/);
+          if (jsonMatch) {
+            tasks = JSON.parse(jsonMatch[0]);
+          }
+        }
+      } catch (jsonError) {
+        console.error('Initial JSON parsing failed:', jsonError);
+        // Если начальный парсинг не удался, применяем альтернативный подход
+        try {
+          // Убираем все, что не похоже на JSON
+          jsonString = jsonString.replace(/^[^[\{]+/, '').replace(/[^\]\}]+$/, '');
+          tasks = JSON.parse(jsonString);
+        } catch (fallbackError) {
+          console.error('Fallback JSON parsing failed:', fallbackError);
+          throw fallbackError; // пробрасываем ошибку дальше
+        }
+      }
       
-      const tasks: LLMTaskResponse[] = JSON.parse(jsonString);
+      // Проверка, что у нас есть массив задач
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        console.warn('Tasks array is empty or not an array, using basic task');
+        throw new Error('Invalid task format returned');
+      }
       
       // Преобразуем форматы данных, чтобы они соответствовали ожидаемому формату
       return tasks.map(task => {

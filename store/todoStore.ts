@@ -74,22 +74,40 @@ const persistDarkMode = async (isDarkMode: boolean) => {
 // Initialize the store with data from AsyncStorage
 export const initializeStore = async () => {
   try {
+    console.log('Loading tasks from AsyncStorage...');
     const storedTasks = await AsyncStorage.getItem(STORAGE_KEY);
     if (storedTasks) {
-      useTodoStore.setState({ tasks: JSON.parse(storedTasks) });
+      const parsedTasks = JSON.parse(storedTasks);
+      console.log(`Loaded ${parsedTasks.length} tasks from storage`);
+      useTodoStore.setState({ tasks: parsedTasks });
+    } else {
+      console.log('No tasks found in storage');
     }
     
+    console.log('Loading projects from AsyncStorage...');
     const storedProjects = await AsyncStorage.getItem(PROJECTS_KEY);
     if (storedProjects) {
-      useTodoStore.setState({ projects: JSON.parse(storedProjects) });
+      const parsedProjects = JSON.parse(storedProjects);
+      console.log(`Loaded ${parsedProjects.length} projects from storage`);
+      useTodoStore.setState({ projects: parsedProjects });
+    } else {
+      console.log('No projects found in storage');
     }
     
+    console.log('Loading dark mode setting from AsyncStorage...');
     const storedDarkMode = await AsyncStorage.getItem(DARK_MODE_KEY);
     if (storedDarkMode) {
-      useTodoStore.setState({ isDarkMode: JSON.parse(storedDarkMode) });
+      const isDarkMode = JSON.parse(storedDarkMode);
+      console.log(`Dark mode setting loaded: ${isDarkMode}`);
+      useTodoStore.setState({ isDarkMode });
+    } else {
+      console.log('No dark mode setting found in storage');
     }
+    
+    return true;
   } catch (error) {
     console.error('Error loading data from storage:', error);
+    throw error;
   }
 };
 

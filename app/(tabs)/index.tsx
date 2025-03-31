@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, SectionList } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { format, isToday, isSameDay, startOfDay } from 'date-fns';
 import { useTodoStore, Task } from '@/store/todoStore';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -11,6 +11,7 @@ import EmptyState from '@/components/EmptyState';
 import CapsuleMenu from '@/components/CapsuleMenu';
 import Colors from '@/constants/Colors';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TasksScreen() {
   const colorScheme = useColorScheme();
@@ -25,6 +26,39 @@ export default function TasksScreen() {
   
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
+  
+  // Log tasks when the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Tasks screen focused, tasks count:', tasks.length);
+      
+      // Обновить состояние из AsyncStorage при фокусе экрана
+      const refreshTasksFromStorage = async () => {
+        try {
+          console.log('Refreshing tasks from AsyncStorage...');
+          const storedTasks = await AsyncStorage.getItem('@todo_app_tasks');
+          if (storedTasks) {
+            const parsedTasks = JSON.parse(storedTasks);
+            console.log(`Refreshed ${parsedTasks.length} tasks from storage`);
+            
+            // Всегда обновляем состояние из AsyncStorage при фокусе экрана
+            useTodoStore.setState({ tasks: parsedTasks });
+          }
+        } catch (error) {
+          console.error('Error refreshing tasks from storage:', error);
+        }
+      };
+      
+      refreshTasksFromStorage();
+      
+      // Установим таймер для периодического обновления задач с экрана
+      const intervalId = setInterval(refreshTasksFromStorage, 2000);
+      
+      return () => {
+        clearInterval(intervalId);
+      };
+    }, [])  // Убрали зависимость от tasks, чтобы не вызывало рекурсивное обновление
+  );
   
   // Filter and sort tasks by date and completion status
   const filteredAndSortedTasks = useMemo(() => {

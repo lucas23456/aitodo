@@ -31,7 +31,12 @@ export default function RootLayout() {
 
   // Initialize store from AsyncStorage
   useEffect(() => {
-    initializeStore();
+    console.log('Initializing store from AsyncStorage...');
+    initializeStore().then(() => {
+      console.log('Store initialized with tasks count:', useTodoStore.getState().tasks.length);
+    }).catch(error => {
+      console.error('Error initializing store:', error);
+    });
   }, []);
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
