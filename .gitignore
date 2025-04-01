@@ -35,6 +35,3 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# Ignore Android and iOS directories
-/android/
-ios/

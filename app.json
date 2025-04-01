@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "VoiceTodo",
-    "slug": "voice-todo",
+    "name": "minimind",
+    "slug": "minimind",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -18,9 +18,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.todo.voicetodo",
+      "bundleIdentifier": "com.minimind.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice commands for creating tasks."
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice commands for creating tasks.",
+        "UIBackgroundModes": ["audio", "remote-notification"]
       }
     },
     "android": {
@@ -28,11 +29,13 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.todo.voicetodo",
+      "package": "com.minimind.app",
       "permissions": [
         "RECORD_AUDIO",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK"
       ]
     },
     "web": {
@@ -42,13 +45,21 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-task-manager",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "This app needs access to your microphone to record voice commands.",
+          "backgroundModes": ["audio"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "openRouterApiKey": "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",
+      "openRouterApiKey": "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",
       "router": {
         "origin": false
       },

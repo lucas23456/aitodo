@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   StyleSheet, 
   View, 
@@ -7,7 +7,9 @@ import {
   TouchableOpacity, 
   TextInput,
   Modal,
-  SafeAreaView
+  SafeAreaView,
+  Platform,
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -16,6 +18,10 @@ import Colors from '@/constants/Colors';
 import { useTodoStore, Project } from '@/store/todoStore';
 import { useColorScheme } from '@/components/useColorScheme';
 import CapsuleMenu from '@/components/CapsuleMenu';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
+import AlarmService from '@/app/services/AlarmService';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
@@ -26,10 +32,22 @@ export default function ProfileScreen() {
   const tasks = useTodoStore((state) => state.tasks);
   const addProject = useTodoStore((state) => state.addProject);
   const deleteProject = useTodoStore((state) => state.deleteProject);
+  const deleteAllTasks = useTodoStore((state) => state.deleteAllTasks);
+  const toggleDarkMode = useTodoStore((state) => state.toggleDarkMode);
   
   const [newProjectModalVisible, setNewProjectModalVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
+  
+  // Time picker state
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [selectedTime, setSelectedTime] = useState(new Date());
+  
+  // Audio state
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [alarmSet, setAlarmSet] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState<Date | null>(null);
   
   // Setup call modal state
   const [setupCallModalVisible, setSetupCallModalVisible] = useState(false);
@@ -37,6 +55,194 @@ export default function ProfileScreen() {
   const [callDate, setCallDate] = useState('');
   const [callTime, setCallTime] = useState('');
   const [callNotes, setCallNotes] = useState('');
+  
+  // Настройка обработчика уведомлений для запуска проигрывания звука
+  useEffect(() => {
+    // Настройка обработчика для выполнения кода при получении уведомления
+    const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Получено уведомление:', notification?.request?.content?.data);
+      
+      // Воспроизводим звук только если это уведомление от будильника
+      if (notification?.request?.content?.data?.type === 'alarm') {
+        console.log('Запуск воспроизведения будильника по уведомлению');
+        playRingtone();
+      }
+    });
+    
+    // Запрос разрешений на уведомления при монтировании компонента
+    const requestPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Разрешите уведомления, чтобы будильник работал правильно!');
+      }
+    };
+    
+    requestPermissions();
+    
+    // Проверяем, есть ли активный будильник при загрузке компонента
+    const checkExistingAlarms = async () => {
+      try {
+        const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+        
+        // Ищем уведомления будильника
+        const alarmNotifications = scheduledNotifications.filter(
+          notification => notification.content.data?.type === 'alarm'
+        );
+        
+        if (alarmNotifications.length > 0) {
+          console.log('Найдены запланированные будильники:', alarmNotifications.length);
+          
+          // Найдем следующий будильник с наиболее ранней датой
+          let nextAlarmDate: Date | null = null;
+          
+          for (const notification of alarmNotifications) {
+            // Безопасное извлечение даты из структуры уведомления
+            try {
+              // Type assertion to handle notification trigger structure
+              type TriggerWithDate = { date: string | number | Date };
+              const trigger = notification.trigger as unknown as TriggerWithDate;
+              const triggerDate = trigger && 'date' in trigger
+                ? new Date(trigger.date) 
+                : null;
+                
+              if (triggerDate && (nextAlarmDate === null || triggerDate < nextAlarmDate)) {
+                nextAlarmDate = triggerDate;
+              }
+            } catch (e) {
+              console.log('Ошибка при извлечении даты из уведомления:', e);
+            }
+          }
+          
+          if (nextAlarmDate) {
+            console.log('Найден запланированный будильник на:', nextAlarmDate.toLocaleTimeString());
+            
+            // Обновляем состояние
+            setScheduledTime(nextAlarmDate);
+            setAlarmSet(true);
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при проверке существующих будильников:', error);
+      }
+    };
+    
+    checkExistingAlarms();
+    
+    return () => {
+      notificationSubscription.remove();
+    };
+  }, []);
+  
+  // Load and play the ringtone
+  const playRingtone = async () => {
+    console.log('Playing ringtone...');
+    
+    try {
+      // Unload any previous sound
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      
+      // Устанавливаем режим аудио для воспроизведения 
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      
+      // Load the sound file
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('@/assets/sounds/ringtone.mp3'),
+        { shouldPlay: true, isLooping: true }
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      
+      // When playback finishes
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.error('Error playing sound:', error);
+    }
+  };
+  
+  // Stop the ringtone
+  const stopRingtone = async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+    
+    // Остановить фоновую задачу и уведомления
+    await AlarmService.stopAlarmSound();
+    setAlarmSet(false);
+    setScheduledTime(null);
+  };
+  
+  // Schedule the alarm for the selected time
+  const scheduleAlarm = async (selectedDate: Date): Promise<Date> => {
+    // Calculate milliseconds until the alarm should trigger
+    const now = new Date();
+    let targetTime = new Date(now);
+    targetTime.setHours(selectedDate.getHours());
+    targetTime.setMinutes(selectedDate.getMinutes());
+    targetTime.setSeconds(0);
+    
+    // If the time is in the past (for today), schedule it for tomorrow
+    if (targetTime <= now) {
+      targetTime.setDate(targetTime.getDate() + 1);
+    }
+    
+    console.log(`Установка будильника на ${targetTime.toLocaleTimeString()}`);
+    
+    // Использовать новый метод планирования будильника
+    const success = await AlarmService.scheduleAlarmNotification(targetTime);
+    
+    if (success) {
+      // Save the scheduled time and mark alarm as set
+      setScheduledTime(targetTime);
+      setAlarmSet(true);
+    } else {
+      alert('Не удалось установить будильник. Проверьте разрешения приложения.');
+    }
+    
+    return targetTime;
+  };
+  
+  // Clean up resources when component unmounts
+  useEffect(() => {
+    return () => {
+      // Unload the sound when component unmounts
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+  
+  // Setup audio mode on component mount
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error('Failed to set audio mode:', error);
+      }
+    };
+    
+    setupAudio();
+  }, []);
   
   // Handle setup call
   const handleSetupCall = () => {
@@ -89,6 +295,50 @@ export default function ProfileScreen() {
     return tasks.filter(task => task.completed).length;
   };
   
+  // Handle time change
+  const onTimeChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || selectedTime;
+    setTimePickerVisible(Platform.OS === 'ios');
+    setSelectedTime(currentDate);
+    
+    if (Platform.OS === 'android' && event.type === 'set') {
+      // For Android, schedule alarm immediately after time selection
+      scheduleAlarm(currentDate).then(scheduledDate => {
+        const hours = scheduledDate.getHours();
+        const minutes = scheduledDate.getMinutes();
+        const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        alert(`Звонок установлен на ${formattedTime}`);
+      });
+    }
+  };
+  
+  // Format time for display
+  const formatTime = (date: Date | null): string => {
+    if (!date) return '';
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+  
+  // Handle delete all tasks
+  const handleDeleteAllTasks = () => {
+    Alert.alert(
+      'Delete All Tasks',
+      'Are you sure you want to delete all tasks? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete All', 
+          style: 'destructive',
+          onPress: () => {
+            deleteAllTasks();
+            Alert.alert('Success', 'All tasks have been deleted.');
+          }
+        }
+      ]
+    );
+  };
+  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
@@ -112,14 +362,38 @@ export default function ProfileScreen() {
             </View>
           </View>
           
-          {/* Setup Call Button */}
-          <TouchableOpacity 
-            style={[styles.setupCallButton, { backgroundColor: colors.primary }]}
-            onPress={() => setSetupCallModalVisible(true)}
-          >
-            <MaterialIcons name="call" size={20} color="#FFFFFF" />
-            <Text style={styles.setupCallText}>Настроить звонок</Text>
-          </TouchableOpacity>
+          {/* Setup Call Button with Alarm Status */}
+          <View style={styles.alarmContainer}>
+            <TouchableOpacity 
+              style={[styles.setupCallButton, { backgroundColor: alarmSet ? colors.success : colors.primary }]}
+              onPress={() => setTimePickerVisible(true)}
+            >
+              <MaterialIcons name={alarmSet ? "alarm-on" : "call"} size={20} color="#FFFFFF" />
+              <Text style={styles.setupCallText}>
+                {alarmSet ? `Звонок в ${formatTime(scheduledTime)}` : "Настроить звонок"}
+              </Text>
+            </TouchableOpacity>
+            
+            {isPlaying && (
+              <TouchableOpacity 
+                style={[styles.stopButton, { backgroundColor: colors.error }]}
+                onPress={stopRingtone}
+              >
+                <MaterialIcons name="stop" size={20} color="#FFFFFF" />
+                <Text style={styles.setupCallText}>Остановить</Text>
+              </TouchableOpacity>
+            )}
+            
+            {alarmSet && !isPlaying && (
+              <TouchableOpacity 
+                style={[styles.stopButton, { backgroundColor: colors.error }]}
+                onPress={stopRingtone}
+              >
+                <MaterialIcons name="cancel" size={20} color="#FFFFFF" />
+                <Text style={styles.setupCallText}>Отменить будильник</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           <View style={[styles.statsContainer, { borderTopColor: colors.border, borderTopWidth: 1 }]}>
             <View style={styles.statItem}>
@@ -199,6 +473,68 @@ export default function ProfileScreen() {
             </View>
           ))
         )}
+        
+        {/* Settings Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
+        </View>
+        
+        <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
+          {/* Dark Mode Setting */}
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={toggleDarkMode}
+          >
+            <View style={styles.settingLabelContainer}>
+              <MaterialIcons 
+                name={isDarkMode ? "nightlight-round" : "wb-sunny"} 
+                size={22} 
+                color={colors.text} 
+              />
+              <Text style={[styles.settingLabel, { color: colors.text }]}>
+                Dark Mode
+              </Text>
+            </View>
+            <View style={[
+              styles.toggleSwitch, 
+              { backgroundColor: isDarkMode ? colors.primary : colors.gray }
+            ]}>
+              <View style={[
+                styles.toggleKnob, 
+                { transform: [{ translateX: isDarkMode ? 20 : 0 }] }
+              ]} />
+            </View>
+          </TouchableOpacity>
+          
+          {/* Delete All Tasks Setting */}
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={handleDeleteAllTasks}
+          >
+            <View style={styles.settingLabelContainer}>
+              <MaterialIcons 
+                name="delete-forever" 
+                size={22} 
+                color={colors.danger} 
+              />
+              <Text style={[styles.settingLabel, { color: colors.danger }]}>
+                Delete All Tasks
+              </Text>
+            </View>
+            <MaterialIcons 
+              name="chevron-right" 
+              size={22} 
+              color={colors.danger} 
+            />
+          </TouchableOpacity>
+          
+          {/* Task Statistics */}
+          <View style={styles.settingStatsRow}>
+            <Text style={[styles.settingDescription, { color: colors.secondaryText }]}>
+              You have {tasks.length} tasks total, {getCompletedTaskCount()} completed
+            </Text>
+          </View>
+        </View>
       </ScrollView>
       
       {/* New Project Modal */}
@@ -280,117 +616,60 @@ export default function ProfileScreen() {
         </View>
       </Modal>
       
-      {/* Setup Call Modal */}
-      <Modal
-        visible={setupCallModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSetupCallModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Настроить звонок</Text>
-              <TouchableOpacity onPress={() => setSetupCallModalVisible(false)}>
-                <MaterialIcons name="close" size={24} color={colors.secondaryText} />
+      {/* Time Picker for iOS */}
+      {Platform.OS === 'ios' && timePickerVisible && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          visible={timePickerVisible}
+          onRequestClose={() => setTimePickerVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Выберите время звонка</Text>
+                <TouchableOpacity onPress={() => setTimePickerVisible(false)}>
+                  <MaterialIcons name="close" size={24} color={colors.secondaryText} />
+                </TouchableOpacity>
+              </View>
+              
+              <DateTimePicker
+                value={selectedTime}
+                mode="time"
+                display="spinner"
+                onChange={onTimeChange}
+                style={{ width: '100%' }}
+              />
+              
+              <TouchableOpacity 
+                style={[styles.addProjectButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  scheduleAlarm(selectedTime).then(scheduledDate => {
+                    const hours = scheduledDate.getHours();
+                    const minutes = scheduledDate.getMinutes();
+                    const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                    alert(`Звонок установлен на ${formattedTime}`);
+                    setTimePickerVisible(false);
+                  });
+                }}
+              >
+                <Text style={styles.addProjectButtonText}>Сохранить</Text>
               </TouchableOpacity>
             </View>
-            
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Название</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { 
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
-                  color: colors.text,
-                  borderColor: colors.border 
-                }
-              ]}
-              placeholder="Введите название звонка"
-              placeholderTextColor={colors.secondaryText}
-              value={callName}
-              onChangeText={setCallName}
-            />
-            
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Дата</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { 
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
-                  color: colors.text,
-                  borderColor: colors.border 
-                }
-              ]}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={colors.secondaryText}
-              value={callDate}
-              onChangeText={setCallDate}
-            />
-            
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Время</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { 
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
-                  color: colors.text,
-                  borderColor: colors.border 
-                }
-              ]}
-              placeholder="HH:MM"
-              placeholderTextColor={colors.secondaryText}
-              value={callTime}
-              onChangeText={setCallTime}
-            />
-            
-            <Text style={[styles.inputLabel, { color: colors.text }]}>Заметки</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                styles.textArea,
-                { 
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
-                  color: colors.text,
-                  borderColor: colors.border 
-                }
-              ]}
-              placeholder="Дополнительная информация о звонке"
-              placeholderTextColor={colors.secondaryText}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              value={callNotes}
-              onChangeText={setCallNotes}
-            />
-            
-            <TouchableOpacity 
-              style={[
-                styles.addProjectButton, 
-                { 
-                  backgroundColor: callName.trim() && callDate.trim() && callTime.trim() ? 
-                    colors.primary : colors.lightGray 
-                }
-              ]}
-              onPress={handleSetupCall}
-              disabled={!callName.trim() || !callDate.trim() || !callTime.trim()}
-            >
-              <Text 
-                style={[
-                  styles.addProjectButtonText, 
-                  { 
-                    color: callName.trim() && callDate.trim() && callTime.trim() ? 
-                      colorScheme === 'dark' ? colors.card : 'white' : 
-                      colors.secondaryText 
-                  }
-                ]}
-              >
-                Подтвердить звонок
-              </Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
+      
+      {/* Time Picker for Android */}
+      {Platform.OS === 'android' && timePickerVisible && (
+        <DateTimePicker
+          value={selectedTime}
+          mode="time"
+          is24Hour={true}
+          display="default"
+          onChange={onTimeChange}
+        />
+      )}
       
       <CapsuleMenu />
     </SafeAreaView>
@@ -399,6 +678,9 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   header: {
@@ -455,6 +737,10 @@ const styles = StyleSheet.create({
   },
   profileEmail: {
     fontSize: 14,
+  },
+  alarmContainer: {
+    marginHorizontal: 20,
+    marginVertical: 16,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -597,6 +883,7 @@ const styles = StyleSheet.create({
   addProjectButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
   emptyProjectsCard: {
     borderRadius: 16,
@@ -616,14 +903,63 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    marginHorizontal: 20,
-    marginVertical: 16,
     borderRadius: 10,
+    marginBottom: 0,
+  },
+  stopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 8,
   },
   setupCallText: {
     color: '#FFFFFF',
     fontWeight: '600',
     marginLeft: 8,
     fontSize: 16,
+  },
+  settingsCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  settingLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingLabel: {
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  settingStatsRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  settingDescription: {
+    fontSize: 14,
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    padding: 5,
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'white',
   },
 }); 

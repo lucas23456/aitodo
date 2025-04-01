@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native
 import { Swipeable } from 'react-native-gesture-handler';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
-import { categoryColors, priorityColors, tagColors } from '../constants/Colors';
+import { categoryColors, priorityColors, getTagColor } from '../constants/Colors';
 import { useColorScheme } from '../components/useColorScheme';
 import { Task } from '../store/todoStore';
 import { format, isToday, isTomorrow, isPast } from 'date-fns';
+import { usePathname } from 'expo-router';
 
 type TaskItemProps = {
   task: Task;
@@ -19,6 +20,11 @@ type TaskItemProps = {
 export default function TaskItem({ task, onToggleComplete, onDelete, onPress, onEdit }: TaskItemProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const pathname = usePathname();
+  
+  // Check if we're on the today screen (index) or upcoming screen
+  const isTodayScreen = pathname === '/' || pathname === '/index';
+  const isUpcomingScreen = pathname === '/upcoming';
   
   const renderRightActions = (progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
     const trans = dragX.interpolate({
@@ -140,8 +146,25 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
               </Text>
             ) : null}
             
-            {/* Show due date in a more visible way */}
-            {task.dueDate ? (
+            {/* Show tags if available */}
+            {task.tags && task.tags.length > 0 && (
+              <View style={styles.tagsRow}>
+                {task.tags.map((tag, index) => (
+                  <View 
+                    key={index} 
+                    style={[
+                      styles.tagChip, 
+                      { backgroundColor: getTagColor(tag) }
+                    ]}
+                  >
+                    <Text style={styles.tagChipText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            {/* Show due date only on the upcoming screen */}
+            {task.dueDate && isUpcomingScreen ? (
               <View style={styles.dateContainer}>
                 <MaterialIcons name="event" size={12} color={colors.secondaryText} />
                 <Text style={[styles.dateText, { color: colors.secondaryText }]}>
@@ -228,7 +251,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
                   style={[
                     styles.tag, 
                     { 
-                      backgroundColor: tagColors[tag as keyof typeof tagColors] || colors.gray,
+                      backgroundColor: getTagColor(tag),
                       opacity: task.completed ? 0.6 : 1
                     }
                   ]}
@@ -409,5 +432,22 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 12,
     marginLeft: 4,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  tagChip: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 4,
+    marginBottom: 2,
+  },
+  tagChipText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '500',
   },
 }); 

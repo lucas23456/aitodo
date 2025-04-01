@@ -68,7 +68,7 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.addButtonWrapper, { backgroundColor: colors.primary }]}
+          style={[styles.addButtonWrapper, { backgroundColor: '#000000' }]}
           onPress={handleAddTask}
         >
           <MaterialIcons 

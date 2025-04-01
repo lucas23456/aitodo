@@ -29,20 +29,29 @@ interface TodoState {
   tasks: Task[];
   projects: Project[];
   isDarkMode: boolean;
+  customTags: string[];
+  customCategories: string[];
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (task: Task) => void;
   toggleTaskStatus: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
+  deleteAllTasks: () => void;
   toggleDarkMode: () => void;
   addProject: (project: Omit<Project, 'id' | 'createdAt'>) => void;
   updateProject: (project: Project) => void;
   deleteProject: (projectId: string) => void;
   getProjectTasks: (projectId: string) => Task[];
+  addCustomTag: (tag: string) => void;
+  deleteCustomTag: (tag: string) => void;
+  addCustomCategory: (category: string) => void;
+  deleteCustomCategory: (category: string) => void;
 }
 
 const STORAGE_KEY = '@todo_app_tasks';
 const PROJECTS_KEY = '@todo_app_projects';
 const DARK_MODE_KEY = '@todo_app_dark_mode';
+const CUSTOM_TAGS_KEY = '@todo_app_custom_tags';
+const CUSTOM_CATEGORIES_KEY = '@todo_app_custom_categories';
 
 // Helper function to persist tasks to AsyncStorage
 const persistTasks = async (tasks: Task[]) => {
@@ -68,6 +77,24 @@ const persistDarkMode = async (isDarkMode: boolean) => {
     await AsyncStorage.setItem(DARK_MODE_KEY, JSON.stringify(isDarkMode));
   } catch (error) {
     console.error('Error saving dark mode setting:', error);
+  }
+};
+
+// Helper function to persist custom tags to AsyncStorage
+const persistCustomTags = async (customTags: string[]) => {
+  try {
+    await AsyncStorage.setItem(CUSTOM_TAGS_KEY, JSON.stringify(customTags));
+  } catch (error) {
+    console.error('Error saving custom tags:', error);
+  }
+};
+
+// Helper function to persist custom categories to AsyncStorage
+const persistCustomCategories = async (customCategories: string[]) => {
+  try {
+    await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(customCategories));
+  } catch (error) {
+    console.error('Error saving custom categories:', error);
   }
 };
 
@@ -104,6 +131,16 @@ export const initializeStore = async () => {
       console.log('No dark mode setting found in storage');
     }
     
+    console.log('Loading custom tags from AsyncStorage...');
+    const storedCustomTags = await AsyncStorage.getItem(CUSTOM_TAGS_KEY);
+    if (storedCustomTags) {
+      const customTags = JSON.parse(storedCustomTags);
+      console.log(`Loaded ${customTags.length} custom tags from storage`);
+      useTodoStore.setState({ customTags });
+    } else {
+      console.log('No custom tags found in storage');
+    }
+    
     return true;
   } catch (error) {
     console.error('Error loading data from storage:', error);
@@ -115,6 +152,8 @@ export const useTodoStore = create<TodoState>((set, get) => ({
   tasks: [],
   projects: [],
   isDarkMode: false,
+  customTags: [],
+  customCategories: [],
   
   addTask: (task) => set((state) => {
     const newTask: Task = {
@@ -150,6 +189,11 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     const updatedTasks = state.tasks.filter((task) => task.id !== taskId);
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
+  }),
+  
+  deleteAllTasks: () => set(() => {
+    persistTasks([]);
+    return { tasks: [] };
   }),
   
   toggleDarkMode: () => set((state) => {
@@ -200,5 +244,73 @@ export const useTodoStore = create<TodoState>((set, get) => ({
   getProjectTasks: (projectId) => {
     const state = get();
     return state.tasks.filter(task => task.projectId === projectId);
-  }
+  },
+  
+  addCustomTag: (tag) => set((state) => {
+    // Don't add duplicate tags
+    if (state.customTags.includes(tag)) {
+      return state;
+    }
+    
+    const updatedTags = [...state.customTags, tag];
+    persistCustomTags(updatedTags);
+    return { customTags: updatedTags };
+  }),
+  
+  deleteCustomTag: (tag) => set((state) => {
+    const updatedTags = state.customTags.filter(t => t !== tag);
+    
+    // Also remove this tag from any tasks that have it
+    const updatedTasks = state.tasks.map(task => {
+      if (task.tags.includes(tag)) {
+        return {
+          ...task,
+          tags: task.tags.filter(t => t !== tag)
+        };
+      }
+      return task;
+    });
+    
+    persistCustomTags(updatedTags);
+    persistTasks(updatedTasks);
+    
+    return { 
+      customTags: updatedTags,
+      tasks: updatedTasks
+    };
+  }),
+  
+  addCustomCategory: (category) => set((state) => {
+    // Don't add duplicate categories
+    if (state.customCategories.includes(category)) {
+      return state;
+    }
+    
+    const updatedCategories = [...state.customCategories, category];
+    persistCustomCategories(updatedCategories);
+    return { customCategories: updatedCategories };
+  }),
+  
+  deleteCustomCategory: (category) => set((state) => {
+    const updatedCategories = state.customCategories.filter(c => c !== category);
+    
+    // Also remove this category from any tasks that have it
+    const updatedTasks = state.tasks.map(task => {
+      if (task.category === category) {
+        return {
+          ...task,
+          category: '' // Reset to empty string instead of undefined
+        };
+      }
+      return task;
+    });
+    
+    persistCustomCategories(updatedCategories);
+    persistTasks(updatedTasks);
+    
+    return { 
+      customCategories: updatedCategories,
+      tasks: updatedTasks
+    };
+  }),
 })); 

@@ -1,4 +1,4 @@
-package com.todo.voicetodo
+package com.minimind.app
 
 import android.app.Application
 import android.content.res.Configuration

@@ -12,13 +12,14 @@ import {
   FlatList,
 } from 'react-native';
 import { format } from 'date-fns';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Task } from '../store/todoStore';
+import { Task, useTodoStore } from '../store/todoStore';
 import { MaterialIcons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import Colors from '../constants/Colors';
 import { categoryColors, priorityColors, tagColors } from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
+import TagCreator from './TagCreator';
+import CategoryCreator from './CategoryCreator';
 
 type TaskFormProps = {
   visible: boolean;
@@ -30,11 +31,11 @@ type TaskFormProps = {
 // Available categories
 const CATEGORIES = Object.keys(categoryColors);
 
-// Available tags
-const TAGS = Object.keys(tagColors);
+// Available preset tags
+const PRESET_TAGS = Object.keys(tagColors);
 
 // Priority levels
-const PRIORITIES = [
+const PRIORITIES: Array<{ value: 'low' | 'medium' | 'high', label: string }> = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
@@ -75,7 +76,15 @@ const CategoryButton = ({ cat, selectedCategory, onPress }: { cat: string, selec
 };
 
 // PriorityButton component
-const PriorityButton = ({ priority, selectedPriority, onPress }: { priority: { value: 'low' | 'medium' | 'high', label: string }, selectedPriority: string, onPress: (value: 'low' | 'medium' | 'high') => void }) => {
+const PriorityButton = ({ 
+  priority, 
+  selectedPriority, 
+  onPress 
+}: { 
+  priority: { value: 'low' | 'medium' | 'high', label: string }, 
+  selectedPriority: 'low' | 'medium' | 'high', 
+  onPress: (value: 'low' | 'medium' | 'high') => void 
+}) => {
   const colorScheme = useColorScheme();
   return (
     <TouchableOpacity
@@ -113,6 +122,10 @@ const TagButton = ({ tag, selectedTags, onPress }: { tag: string, selectedTags: 
   const colorScheme = useColorScheme();
   const isSelected = selectedTags.includes(tag);
   
+  // For custom tags that don't have predefined colors, use a default color
+  const tagColorKey = tag as keyof typeof tagColors;
+  const tagColor = tagColors[tagColorKey] || '#777777';
+  
   return (
     <TouchableOpacity
       key={tag}
@@ -120,9 +133,9 @@ const TagButton = ({ tag, selectedTags, onPress }: { tag: string, selectedTags: 
         styles.tagButton,
         { 
           backgroundColor: isSelected 
-            ? tagColors[tag as keyof typeof tagColors] 
+            ? tagColor 
             : 'transparent',
-          borderColor: tagColors[tag as keyof typeof tagColors],
+          borderColor: tagColor,
           opacity: isSelected ? 0.9 : 0.7
         }
       ]}
@@ -134,7 +147,7 @@ const TagButton = ({ tag, selectedTags, onPress }: { tag: string, selectedTags: 
           { 
             color: isSelected
               ? colorScheme === 'dark' ? '#000' : 'white'
-              : tagColors[tag as keyof typeof tagColors] 
+              : tagColor 
           }
         ]}
       >
@@ -150,11 +163,21 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [category, setCategory] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [tags, setTags] = useState<string[]>([]);
+  const [showTagCreator, setShowTagCreator] = useState(false);
+  const [showCategoryCreator, setShowCategoryCreator] = useState(false);
+  
+  // Get custom tags and categories from store
+  const customTags = useTodoStore((state) => state.customTags);
+  const customCategories = useTodoStore((state) => state.customCategories);
+  
+  // All available tags (preset + custom)
+  const allTags = [...PRESET_TAGS, ...customTags];
+  
+  // All available categories (preset + custom)
+  const allCategories = [...CATEGORIES, ...customCategories];
   
   // Reset form when initialTask changes or modal closes
   useEffect(() => {
@@ -162,7 +185,6 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
       if (initialTask) {
         setTitle(initialTask.title);
         setDescription(initialTask.description || '');
-        setDueDate(initialTask.dueDate ? new Date(initialTask.dueDate) : null);
         setCategory(initialTask.category || '');
         setPriority(initialTask.priority || 'medium');
         setTags(initialTask.tags || []);
@@ -175,7 +197,6 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setDueDate(null);
     setCategory('');
     setPriority('medium');
     setTags([]);
@@ -187,7 +208,7 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
     onSubmit({
       title: title.trim(),
       description: description.trim(),
-      dueDate: dueDate ? format(dueDate, "yyyy-MM-dd'T'HH:mm:ss") : '',
+      dueDate: new Date().toISOString(), // Set default current date
       completed: initialTask ? initialTask.completed : false,
       category,
       priority,
@@ -198,24 +219,20 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
     onClose();
   };
   
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    
-    if (selectedDate) {
-      setDueDate(selectedDate);
-    }
-  };
-  
-  const removeDueDate = () => {
-    setDueDate(null);
-  };
-
   const toggleTag = (tag: string) => {
     if (tags.includes(tag)) {
       setTags(tags.filter(t => t !== tag));
     } else {
       setTags([...tags, tag]);
     }
+  };
+  
+  const handleAddCustomTag = (tag: string) => {
+    toggleTag(tag);
+  };
+  
+  const handleAddCustomCategory = (newCategory: string) => {
+    setCategory(newCategory);
   };
   
   return (
@@ -248,49 +265,33 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
                 { 
                   color: colors.text,
                   backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
-                  borderColor: colors.border 
+                  borderColor: colors.border,
                 }
               ]}
               placeholder="Task title"
               placeholderTextColor={colors.gray}
               value={title}
               onChangeText={setTitle}
-              autoFocus
             />
             
             {/* Description */}
             <Text style={[styles.label, { color: colors.text }]}>Description (optional)</Text>
             <TextInput
               style={[
-                styles.input, 
                 styles.textArea, 
                 { 
                   color: colors.text,
                   backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
-                  borderColor: colors.border 
+                  borderColor: colors.border,
                 }
               ]}
-              placeholder="Add details about your task"
+              placeholder="Description"
               placeholderTextColor={colors.gray}
-              value={description}
-              onChangeText={setDescription}
               multiline
               numberOfLines={4}
-              textAlignVertical="top"
+              value={description}
+              onChangeText={setDescription}
             />
-            
-            {/* Categories */}
-            <Text style={[styles.label, { color: colors.text }]}>Category</Text>
-            <View style={styles.categoriesContainer}>
-              {CATEGORIES.map((cat) => (
-                <CategoryButton
-                  key={cat}
-                  cat={cat}
-                  selectedCategory={category}
-                  onPress={setCategory}
-                />
-              ))}
-            </View>
             
             {/* Priority */}
             <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
@@ -298,17 +299,58 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               {PRIORITIES.map((p) => (
                 <PriorityButton
                   key={p.value}
-                  priority={p as { value: 'low' | 'medium' | 'high', label: string }}
+                  priority={p}
                   selectedPriority={priority}
                   onPress={setPriority}
                 />
               ))}
             </View>
             
+            {/* Categories */}
+            <View style={styles.tagsHeaderContainer}>
+              <Text style={[styles.label, { color: colors.text }]}>Category</Text>
+              <TouchableOpacity 
+                style={styles.addTagButton}
+                onPress={() => setShowCategoryCreator(true)}
+              >
+                <MaterialIcons name="add" size={18} color={colors.primary} />
+                <Text style={[styles.addTagText, { color: colors.primary }]}>
+                  New Category
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesContainer}
+            >
+              {allCategories.map((cat) => (
+                <CategoryButton
+                  key={cat}
+                  cat={cat}
+                  selectedCategory={category}
+                  onPress={setCategory}
+                />
+              ))}
+            </ScrollView>
+            
             {/* Tags */}
-            <Text style={[styles.label, { color: colors.text }]}>Tags</Text>
+            <View style={styles.tagsHeaderContainer}>
+              <Text style={[styles.label, { color: colors.text }]}>Tags</Text>
+              <TouchableOpacity 
+                style={styles.addTagButton}
+                onPress={() => setShowTagCreator(true)}
+              >
+                <MaterialIcons name="add" size={18} color={colors.primary} />
+                <Text style={[styles.addTagText, { color: colors.primary }]}>
+                  New Tag
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
             <View style={styles.tagsContainer}>
-              {TAGS.map((tag) => (
+              {allTags.map((tag) => (
                 <TagButton
                   key={tag}
                   tag={tag}
@@ -318,66 +360,37 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               ))}
             </View>
             
-            {/* Due Date */}
-            <Text style={[styles.label, { color: colors.text }]}>Due Date (optional)</Text>
-            
-            {dueDate ? (
-              <View style={styles.dateContainer}>
-                <Text style={[styles.dateText, { color: colors.text }]}>
-                  {format(dueDate, 'EEEE, MMMM d, yyyy')}
-                </Text>
-                <TouchableOpacity onPress={removeDueDate}>
-                  <MaterialIcons name="close" size={20} color={colors.gray} />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity 
-                style={[
-                  styles.dateButton, 
-                  { 
-                    backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
-                    borderColor: colors.border 
-                  }
-                ]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <MaterialIcons name="calendar-today" size={20} color={colors.gray} />
-                <Text style={[styles.dateButtonText, { color: colors.gray }]}>
-                  Add due date
-                </Text>
-              </TouchableOpacity>
-            )}
-            
-            {showDatePicker && (
-              <DateTimePicker
-                value={dueDate || new Date()}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-                minimumDate={new Date()}
-              />
-            )}
-          </ScrollView>
-          
-          <View style={styles.footer}>
+            {/* Submit Button */}
             <TouchableOpacity
               style={[
-                styles.button,
-                { backgroundColor: title.trim() ? colors.primary : colors.lightGray }
+                styles.submitButton,
+                { backgroundColor: colors.primary },
+                !title.trim() && styles.disabledButton
               ]}
               onPress={handleSubmit}
               disabled={!title.trim()}
             >
-              <Text style={[
-                styles.buttonText, 
-                { color: title.trim() ? 'white' : colors.gray }
-              ]}>
+              <Text style={styles.submitButtonText}>
                 {initialTask ? 'Update Task' : 'Add Task'}
               </Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      
+      {/* Tag Creator Modal */}
+      <TagCreator
+        visible={showTagCreator}
+        onClose={() => setShowTagCreator(false)}
+        onSelect={handleAddCustomTag}
+      />
+      
+      {/* Category Creator Modal */}
+      <CategoryCreator
+        visible={showCategoryCreator}
+        onClose={() => setShowCategoryCreator(false)}
+        onSelect={handleAddCustomCategory}
+      />
     </Modal>
   );
 }
@@ -456,9 +469,8 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
-  dateButtonText: {
-    fontSize: 16,
-    marginLeft: 8,
+  clearDateButton: {
+    padding: 4,
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -512,18 +524,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  footer: {
-    width: '100%',
+  tagsHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 16,
+    marginBottom: 8,
   },
-  button: {
+  addTagButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 5,
+  },
+  addTagText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  submitButton: {
     borderRadius: 8,
     padding: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: {
+  submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 }); 

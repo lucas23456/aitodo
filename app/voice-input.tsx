@@ -9,7 +9,6 @@ import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import CapsuleMenu from '@/components/CapsuleMenu';
 import { useTodoStore } from '@/store/todoStore';
-import * as Permissions from 'expo-permissions';
 import { Audio } from 'expo-av';
 import { processVoiceText } from '@/utils/speechProcessor';
 
@@ -705,98 +704,98 @@ export default function VoiceInputScreen() {
   // Create a task from voice input
   const createTaskFromVoice = async () => {
     if (!transcript.trim()) {
+      setProcessingState('error');
       return;
     }
     
-    setProcessingTask(true);
+    setProcessingState('parsing');
     
     try {
-      // Показываем анимацию обработки
-      setProcessingState('parsing');
+      // Включаем индикатор ожидания
+      setProcessingTask(true);
       
-      // Делаем копию транскрипта на случай потери данных
-      const safeTranscript = transcript.trim();
-      console.log('Processing voice input:', safeTranscript);
+      // Обработаем текст голосового ввода при помощи утилиты
+      const processedTasks = await processVoiceText(transcript);
       
-      // Обрабатываем входящий текст через нейросеть
-      let processedTasks = [];
-      try {
-        processedTasks = await processVoiceText(safeTranscript);
-        console.log('Processed tasks:', processedTasks);
-      } catch (processError) {
-        console.error('Error processing voice text:', processError);
-        throw processError; // пробрасываем ошибку для обработки в блоке catch
-      }
-      
-      // Меняем состояние обработки
-      setProcessingState('creating');
-      
-      if (!processedTasks || processedTasks.length === 0) {
-        console.log('No tasks returned, creating basic task');
-        throw new Error('No tasks returned from processor');
-      }
-      
-      // Подготовка для отслеживания успешного добавления
-      let addedTasksCount = 0;
-      
-      // Добавляем каждую обработанную задачу
-      for (const task of processedTasks) {
-        try {
-          // Преобразуем в формат, ожидаемый addTask
+      if (processedTasks && processedTasks.length > 0) {
+        setProcessingState('creating');
+        
+        // Добавляем задачи по одной
+        for (const processedTask of processedTasks) {
           const newTask = {
-            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-            title: task.title || safeTranscript,
-            description: task.description || '',
-            dueDate: new Date().toISOString(),
+            id: processedTask.id,
+            title: processedTask.title,
+            description: processedTask.description || '',
+            dueDate: processedTask.dueDate || new Date().toISOString(),
             completed: false,
             createdAt: new Date().toISOString(),
-            priority: task.priority || 'medium'
+            category: processedTask.category || '',
+            tags: processedTask.tags || [],
+            priority: processedTask.priority || 'medium',
           };
           
-          // Добавляем задачу с помощью нашей новой функции
-          await updateTasksWithNewTask(newTask);
-          console.log('Added task to store:', newTask.title);
-          addedTasksCount++;
-        } catch (addError) {
-          console.error('Error adding individual task:', addError);
-          // Продолжаем с другими задачами вместо прерывания всего процесса
-        }
-      }
-      
-      // Проверяем, была ли добавлена хотя бы одна задача
-      if (addedTasksCount === 0) {
-        console.warn('No tasks were successfully added, falling back to basic task');
-        throw new Error('Failed to add any tasks');
-      }
-      
-      // Сбрасываем состояние обработки
-      setProcessingState('completed');
-      
-      // Показываем сообщение об успехе
-      const taskCount = addedTasksCount;
-      Alert.alert(
-        taskCount > 1 ? 'Задачи созданы' : 'Задача создана',
-        taskCount > 1 
-          ? `Создано ${taskCount} задач из вашего голосового ввода` 
-          : `Создана задача: "${processedTasks[0].title}"`,
-        [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              setTranscript('');
-              setProcessingTask(false);
-              setProcessingState('idle');
-              // Используем replace вместо push для обновления состояния экрана
-              router.replace('/');
+          // Сначала пробуем добавить через Zustand addTask
+          try {
+            console.log('Adding task via Zustand addTask:', newTask.title);
+            addTask({
+              title: newTask.title,
+              description: newTask.description,
+              dueDate: newTask.dueDate,
+              completed: false,
+              category: newTask.category,
+              tags: newTask.tags,
+              priority: newTask.priority,
+            });
+          } catch (storeError) {
+            console.error('Error adding task via store:', storeError);
+            
+            // Если не удалось, используем резервный метод
+            try {
+              const success = await updateTasksWithNewTask(newTask);
+              if (!success) {
+                console.error('Failed to add task with both methods:', newTask.title);
+              }
+            } catch (fallbackError) {
+              console.error('Critical error adding task:', fallbackError);
             }
           }
-        ]
-      );
+        }
+        
+        // Очищаем transcript и завершаем обработку
+        setProcessingState('completed');
+        setRecordingState('idle');
+        
+        // Показываем пользователю сообщение об успехе
+        const taskCount = processedTasks.length;
+        const taskWord = taskCount > 1 ? 'tasks' : 'task';
+        Alert.alert(
+          'Task Created',
+          `Successfully added ${taskCount} ${taskWord} from your voice input.`,
+          [{ text: 'OK' }]
+        );
+        
+        // Возвращаемся на главный экран после короткой задержки
+        setTimeout(() => {
+          setTranscript('');
+          router.push('/');
+        }, 1500);
+      } else {
+        // Не удалось создать задачи из голосового ввода
+        setProcessingState('error');
+        Alert.alert(
+          'Error',
+          'Could not create tasks from your voice input. Please try again or enter tasks manually.',
+          [{ text: 'OK' }]
+        );
+      }
     } catch (error) {
-      console.error('Error in voice task creation flow:', error);
-      // В случае ошибки создаем базовую задачу с оригинальным текстом
+      console.error('Error processing voice input:', error);
       setProcessingState('error');
-      createBasicTask(transcript.trim());
+      
+      // Создаем простую задачу без обработки
+      await createBasicTask(transcript);
+    } finally {
+      setProcessingTask(false);
     }
   };
   
@@ -813,7 +812,9 @@ export default function VoiceInputScreen() {
       dueDate: today.toISOString(), // Гарантируем использование сегодняшней даты
       completed: false,
       createdAt: today.toISOString(),
-      priority: 'medium' as 'low' | 'medium' | 'high'
+      priority: 'medium' as 'low' | 'medium' | 'high',
+      category: '',
+      tags: []
     };
     
     // Добавляем задачу с помощью нашей новой функции

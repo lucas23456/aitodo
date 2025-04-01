@@ -81,3 +81,40 @@ export const tagColors = {
   InProgress: '#666666',
   Review: '#555555',
 };
+
+// Predefined colors to use for custom tags
+export const customTagColors = [
+  '#1A237E', // Deep blue
+  '#01579B', // Teal blue
+  '#006064', // Dark teal
+  '#004D40', // Deep green
+  '#1B5E20', // Forest green
+  '#33691E', // Olive green
+  '#F57F17', // Amber
+  '#E65100', // Orange
+  '#BF360C', // Deep orange
+  '#3E2723', // Brown
+  '#4A148C', // Purple
+  '#311B92', // Deep purple
+  '#880E4F', // Pink
+  '#B71C1C', // Red
+  '#4E342E', // Brown
+];
+
+// Function to get a color for a custom tag based on the tag name
+export const getTagColor = (tag: string): string => {
+  // First check if it's a predefined tag
+  if (tagColors[tag as keyof typeof tagColors]) {
+    return tagColors[tag as keyof typeof tagColors];
+  }
+  
+  // Otherwise use a hash of the tag name to get a consistent color
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Use the hash to pick a color from our predefined custom colors
+  const colorIndex = Math.abs(hash) % customTagColors.length;
+  return customTagColors[colorIndex];
+};

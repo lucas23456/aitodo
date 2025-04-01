@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, SectionList } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, SectionList, FlatList } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useFocusEffect } from 'expo-router';
-import { format, isToday, isSameDay, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { useTodoStore, Task } from '@/store/todoStore';
 import { useColorScheme } from '@/components/useColorScheme';
 import TaskItem from '@/components/TaskItem';
@@ -12,6 +12,8 @@ import CapsuleMenu from '@/components/CapsuleMenu';
 import Colors from '@/constants/Colors';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import TagCreator from '@/components/TagCreator';
+import { categoryColors } from '@/constants/Colors';
 
 export default function TasksScreen() {
   const colorScheme = useColorScheme();
@@ -19,6 +21,7 @@ export default function TasksScreen() {
   const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
   const tasks = useTodoStore((state) => state.tasks);
+  const customTags = useTodoStore((state) => state.customTags);
   const addTask = useTodoStore((state) => state.addTask);
   const updateTask = useTodoStore((state) => state.updateTask);
   const toggleTaskStatus = useTodoStore((state) => state.toggleTaskStatus);
@@ -26,6 +29,7 @@ export default function TasksScreen() {
   
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
+  const [isTagCreatorVisible, setIsTagCreatorVisible] = useState(false);
   
   // Log tasks when the screen comes into focus
   useFocusEffect(
@@ -60,39 +64,43 @@ export default function TasksScreen() {
     }, [])  // Убрали зависимость от tasks, чтобы не вызывало рекурсивное обновление
   );
   
-  // Filter and sort tasks by date and completion status
-  const filteredAndSortedTasks = useMemo(() => {
-    // Get today's date
-    const today = startOfDay(new Date());
-    console.log('Today is:', today.toISOString());
-    
-    // Filter tasks for today
-    const todaysTasks = tasks.filter(task => {
-      if (!task.dueDate) return false;
-      
-      const taskDate = startOfDay(new Date(task.dueDate));
-      const isTaskToday = isSameDay(taskDate, today);
-      
-      // Отладочная информация для отслеживания проблем с отображением задач
-      if (isTaskToday) {
-        console.log(`Task "${task.title}" IS for today, date: ${taskDate.toISOString()}`);
-      } else {
-        console.log(`Task "${task.title}" is NOT for today, date: ${taskDate.toISOString()}`);
+  // Group tasks by categories
+  const groupedTasks = useMemo(() => {
+    // Get all categories from the tasks
+    const categories = new Set<string>();
+    tasks.forEach(task => {
+      if (task.category) {
+        categories.add(task.category);
       }
-      
-      return isTaskToday;
     });
     
-    console.log('Total today tasks found:', todaysTasks.length);
+    // Add all category names from the categoryColors object
+    Object.keys(categoryColors).forEach(category => {
+      categories.add(category);
+    });
     
-    // Group tasks by completion status
-    const incompleteTasks = todaysTasks.filter(task => !task.completed);
-    const completedTasks = todaysTasks.filter(task => task.completed);
+    // Create sections for each category
+    const sections = Array.from(categories).map(category => {
+      // Filter tasks by this category
+      const tasksInCategory = tasks.filter(task => task.category === category);
+      
+      return {
+        title: category,
+        data: tasksInCategory
+      };
+    });
     
-    return {
-      incomplete: incompleteTasks,
-      completed: completedTasks
-    };
+    // Add uncategorized tasks section
+    const uncategorizedTasks = tasks.filter(task => !task.category);
+    if (uncategorizedTasks.length > 0) {
+      sections.push({
+        title: 'Uncategorized',
+        data: uncategorizedTasks
+      });
+    }
+    
+    // Only return sections that have tasks
+    return sections.filter(section => section.data.length > 0);
   }, [tasks]);
   
   const handleAddTask = () => {
@@ -127,37 +135,22 @@ export default function TasksScreen() {
     
     setIsFormVisible(false);
   };
-  
-  // Prepare data for the Section List for today's tasks
-  const sectionListData = [
-    {
-      title: 'Tasks',
-      data: filteredAndSortedTasks.incomplete
-    },
-    {
-      title: 'Completed',
-      data: filteredAndSortedTasks.completed
-    }
-  ].filter(section => section.data.length > 0);
-  
-  // Check if there are no tasks for today
-  const noTasksForToday = sectionListData.every(section => section.data.length === 0);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
-      {/* Header with today title and task count */}
+      {/* Header with title */}
       <View style={styles.headerContainer}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>today</Text>
       </View>
       
       {/* Tasks list or empty state */}
-      {noTasksForToday ? (
-        <EmptyState message="No tasks for today. Add a new task!" />
+      {groupedTasks.length === 0 ? (
+        <EmptyState message="No tasks found. Add a new task!" />
       ) : (
         <SectionList
-          sections={sectionListData}
+          sections={groupedTasks}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TaskItem
@@ -169,7 +162,14 @@ export default function TasksScreen() {
             />
           )}
           renderSectionHeader={({ section: { title } }) => (
-            <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
+            <View style={[
+              styles.sectionHeader, 
+              { 
+                backgroundColor: colors.background,
+                borderLeftWidth: 4,
+                borderLeftColor: categoryColors[title as keyof typeof categoryColors] || colors.gray
+              }
+            ]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
             </View>
           )}
@@ -185,6 +185,12 @@ export default function TasksScreen() {
         onClose={() => setIsFormVisible(false)}
         onSubmit={handleSubmitTask}
         initialTask={selectedTask}
+      />
+      
+      <TagCreator
+        visible={isTagCreatorVisible}
+        onClose={() => setIsTagCreatorVisible(false)}
+        onSelect={(tag) => setIsTagCreatorVisible(false)}
       />
     </SafeAreaView>
   );
@@ -208,31 +214,6 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '600',
   },
-  taskCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  countBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  countText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  timeProgressContainer: {
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  timeProgressText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
   sectionHeader: {
     paddingHorizontal: 24,
     paddingTop: 16,
@@ -240,59 +221,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 4,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 1,
+    marginLeft: 8,
   },
   listContent: {
     paddingBottom: 100,
     paddingTop: 8,
-  },
-  emptyDateContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 100,
-  },
-  emptyDateText: {
-    fontSize: 16,
-    fontStyle: 'italic',
-  },
-  taskItemContainer: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  checkboxContainer: {
-    marginRight: 12,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  taskContentContainer: {
-    flex: 1,
-  },
-  companyPrefix: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  taskTitle: {
-    fontSize: 14,
-  },
-  taskTimeContainer: {
-    marginLeft: 12,
-  },
-  taskTime: {
-    fontSize: 12,
   },
 });

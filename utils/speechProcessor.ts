@@ -13,10 +13,20 @@ interface LLMTaskResponse {
 }
 
 interface ProcessedTask {
+  id: string;
   title: string;
   description?: string;
   priority?: 'low' | 'medium' | 'high';
   dueDate?: string;
+  completed: boolean;
+  createdAt: string;
+  category?: string;
+  tags?: string[];
+}
+
+// Вспомогательная функция для генерации уникального идентификатора
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
 /**
@@ -37,7 +47,9 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       2. Добавь один подходящий эмодзи в начало названия каждой задачи
       3. Описание (опционально, если есть детали)
       4. Приоритет (high, medium, low - определи исходя из срочности)
-      5. Срок выполнения (если упоминается конкретная дата, используй её. Если не упоминается - используй сегодняшнюю дату)
+      5. Категорию (Work, Personal, Health, Shopping, Education, Finance, Travel, Design, Research, или другую подходящую)
+      6. Теги (важные ключевые слова из задачи, рекомендуемые: Urgent, Important, Meeting, Project, Reminder, Design, Feedback, Later, InProgress, Review)
+      7. Срок выполнения (если упоминается конкретная дата, используй её. Если не упоминается - используй сегодняшнюю дату)
       
       Текст может содержать несколько задач, разбей их правильно.
       ВАЖНО: Для всех задач, если срок явно не указан, поставь сегодняшнюю дату.
@@ -49,6 +61,8 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
           "title": "🛒 Название задачи с эмодзи",
           "description": "Описание задачи (если есть)",
           "priority": "high|medium|low",
+          "category": "Work|Personal|Health|Shopping|Education|Finance|Travel|Design|Research|Other",
+          "tags": ["Urgent", "Meeting", "Другие_теги_если_есть"],
           "dueDate": "${new Date().toISOString()}" // Используй этот формат с текущей датой по умолчанию
         },
         // другие задачи
@@ -56,46 +70,95 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
     `;
 
     // Получаем API ключ из переменных окружения или временный ключ для тестирования
-    // В продакшене нужно настроить через .env или безопасное хранилище
-    const apiKey = Constants?.expoConfig?.extra?.openRouterApiKey || process.env.OPEN_ROUTER_API_KEY || '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';
+    const apiKey = Constants?.expoConfig?.extra?.openRouterApiKey || process.env.OPEN_ROUTER_API_KEY || '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';
     
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
+    // Пробуем сначала первую модель, если не получится - используем вторую
+    const models = [
+      'google/gemini-2.0-flash-exp:free'
+    ];
+    
+    let data;
+    let response;
+    let successfulModel = '';
+    
+    // Попробуем последовательно разные модели
+    for (const model of models) {
+      try {
+        console.log(`Trying to use model: ${model}`);
+        
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://voice-todo.app',  // Добавляем referer для OpenRouter
+            'X-Title': 'VoiceTodo App'                 // Добавляем название приложения
           },
-          {
-            role: 'user',
-            content: text,
-          },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 1000,
-        temperature: 0.2
-      }),
-    });
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              {
+                role: 'system',
+                content: systemPrompt + "\nВажно: возвращай ТОЛЬКО правильно форматированный JSON массив задач и ничего больше!"
+              },
+              {
+                role: 'user',
+                content: text,
+              },
+            ],
+            response_format: { type: "json_object" },
+            max_tokens: 1000,
+            temperature: 0.4  // Снижаем температуру для более предсказуемых ответов
+          }),
+        });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('LLM API error:', errorText);
-      throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`LLM API error with model ${model}:`, errorText);
+          continue; // Пробуем следующую модель
+        }
+
+        data = await response.json();
+        console.log(`Response from model ${model}:`, JSON.stringify(data).substring(0, 200) + '...');
+        
+        // Проверяем, что в ответе есть структура message.content
+        if (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) {
+          successfulModel = model;
+          break; // Нашли работающую модель с полным ответом
+        } else {
+          console.error(`Model ${model} returned incomplete response structure:`, JSON.stringify(data));
+          // Продолжаем перебор моделей
+        }
+      } catch (modelError) {
+        console.error(`Error with model ${model}:`, modelError);
+        // Продолжаем перебор моделей
+      }
     }
-
-    const data = await response.json();
-    console.log('LLM Response:', data);
+    
+    // Если данные не были получены после всех попыток
+    if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('All models failed. Response structure:', JSON.stringify(response || {}));
+      throw new Error('Could not get valid response from any LLM model');
+    }
     
     // Извлекаем текст ответа
-    const content = data.choices?.[0]?.message?.content;
+    const content = data.choices[0].message.content;
+    
+    // Проверяем наличие контента
     if (!content) {
-      throw new Error('LLM returned empty response');
+      console.error(`Empty content in response from model ${successfulModel}:`, JSON.stringify(data));
+      // Вместо ошибки вернем базовую задачу
+      return [{
+        id: generateId(),
+        title: `📝 ${text.length > 30 ? text.substring(0, 30) + '...' : text}`,
+        description: text,
+        priority: 'medium',
+        dueDate: new Date().toISOString(),
+        completed: false,
+        createdAt: new Date().toISOString(),
+        category: '',
+        tags: [],
+      }];
     }
     
     // Парсим JSON из ответа
@@ -106,8 +169,6 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
 
       // Пытаемся извлечь JSON массив из текста разными способами
       try {
-        console.log('Raw LLM output:', jsonString);
-        
         // Если вернулся объект с tasks как массивом
         if (jsonString.startsWith('{') && jsonString.includes('"tasks"')) {
           const jsonObj = JSON.parse(jsonString);
@@ -135,7 +196,6 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
           if (objectMatches && objectMatches.length > 0) {
             // Создаем массив из найденных объектов
             const objectsJson = `[${objectMatches.join(',')}]`;
-            console.log('Constructed JSON array:', objectsJson);
             try {
               tasks = JSON.parse(objectsJson);
             } catch (e) {
@@ -152,7 +212,6 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
           console.error('Aggressive JSON extraction failed:', aggressiveError);
           
           // Последняя попытка - просто создаем базовую задачу с текстом ответа LLM
-          console.log('Creating simple task based on LLM response');
           tasks = [{
             title: content.length > 50 ? `${content.substring(0, 50)}...` : content,
             description: content
@@ -162,8 +221,18 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       
       // Проверка, что у нас есть массив задач
       if (!Array.isArray(tasks) || tasks.length === 0) {
-        console.warn('Tasks array is empty or not an array, using basic task');
-        throw new Error('Invalid task format returned');
+        console.log('Creating default task from invalid task format');
+        return [{
+          id: generateId(),
+          title: `📝 ${text.length > 30 ? text.substring(0, 30) + '...' : text}`,
+          description: text,
+          priority: 'medium',
+          dueDate: new Date().toISOString(),
+          completed: false,
+          createdAt: new Date().toISOString(),
+          category: '',
+          tags: [],
+        }];
       }
       
       // Преобразуем форматы данных, чтобы они соответствовали ожидаемому формату
@@ -193,11 +262,44 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
           dueDate = today.toISOString();
         }
         
+        // Нормализуем теги
+        let tags: string[] = [];
+        if (task.tags) {
+          if (typeof task.tags === 'string') {
+            // Если теги пришли строкой, разделяем по запятой
+            tags = task.tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+          } else if (Array.isArray(task.tags)) {
+            // Если теги уже массив, используем их
+            tags = task.tags.map(tag => tag.toString().trim()).filter(tag => tag.length > 0);
+          }
+        }
+        
+        // Нормализуем категорию
+        let category = '';
+        if (task.category && typeof task.category === 'string') {
+          category = task.category.trim();
+        }
+        
+        // Нормализуем приоритет
+        let priority: 'low' | 'medium' | 'high' = 'medium';
+        if (task.priority) {
+          const priorityStr = task.priority.toString().toLowerCase().trim();
+          if (['low', 'medium', 'high'].includes(priorityStr)) {
+            priority = priorityStr as 'low' | 'medium' | 'high';
+          }
+        }
+        
+        // Собираем финальную задачу
         const processedTask: ProcessedTask = {
+          id: generateId(),
           title: task.title || '',
           description: task.description || '',
-          priority: ['low', 'medium', 'high'].includes(task.priority as string) ? task.priority as 'low' | 'medium' | 'high' : 'medium',
-          dueDate: dueDate
+          priority,
+          dueDate,
+          completed: false,
+          createdAt: new Date().toISOString(),
+          category,
+          tags,
         };
         
         // Проверяем наличие эмодзи, если нет - добавляем стандартное
@@ -211,20 +313,30 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       console.error('Error parsing LLM response:', error);
       // Если не удалось распарсить JSON, вернем базовую задачу с исходным текстом
       return [{
-        title: `📝 ${text}`,
-        description: '',
+        id: generateId(),
+        title: `📝 ${text.length > 30 ? text.substring(0, 30) + '...' : text}`,
+        description: text,
         priority: 'medium',
-        dueDate: new Date().toISOString()
+        dueDate: new Date().toISOString(),
+        completed: false,
+        createdAt: new Date().toISOString(),
+        category: '',
+        tags: [],
       }];
     }
   } catch (error) {
     console.error('Error processing voice text:', error);
     // В случае любой ошибки возвращаем простую задачу с исходным текстом
     return [{
-      title: `📝 ${text}`,
-      description: '',
+      id: generateId(),
+      title: `📝 ${text.length > 30 ? text.substring(0, 30) + '...' : text}`,
+      description: text,
       priority: 'medium',
-      dueDate: new Date().toISOString()
+      dueDate: new Date().toISOString(),
+      completed: false,
+      createdAt: new Date().toISOString(),
+      category: '',
+      tags: [],
     }];
   }
 } 
