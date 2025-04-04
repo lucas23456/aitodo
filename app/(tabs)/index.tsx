@@ -30,26 +30,26 @@ export default function TasksScreen() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
   const [isTagCreatorVisible, setIsTagCreatorVisible] = useState(false);
+  // Track collapsed categories
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  // Track if the completed section is collapsed
+  const [isCompletedCollapsed, setIsCompletedCollapsed] = useState(false);
   
   // Log tasks when the screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      console.log('Tasks screen focused, tasks count:', tasks.length);
-      
       // Обновить состояние из AsyncStorage при фокусе экрана
       const refreshTasksFromStorage = async () => {
         try {
-          console.log('Refreshing tasks from AsyncStorage...');
           const storedTasks = await AsyncStorage.getItem('@todo_app_tasks');
           if (storedTasks) {
             const parsedTasks = JSON.parse(storedTasks);
-            console.log(`Refreshed ${parsedTasks.length} tasks from storage`);
             
             // Всегда обновляем состояние из AsyncStorage при фокусе экрана
             useTodoStore.setState({ tasks: parsedTasks });
           }
         } catch (error) {
-          console.error('Error refreshing tasks from storage:', error);
+          // Тихо обрабатываем ошибку без логов
         }
       };
       
@@ -64,11 +64,40 @@ export default function TasksScreen() {
     }, [])  // Убрали зависимость от tasks, чтобы не вызывало рекурсивное обновление
   );
   
+  // Handle toggling category collapse state
+  const toggleCategoryCollapse = (category: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  // Handle toggling completed section collapse state
+  const toggleCompletedCollapse = () => {
+    setIsCompletedCollapsed(!isCompletedCollapsed);
+  };
+  
   // Group tasks by categories
   const groupedTasks = useMemo(() => {
+    // Filter tasks to only include incomplete tasks due today or in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of day for proper comparison
+    
+    // Filter out future tasks and completed tasks
+    const filteredTasks = tasks.filter(task => {
+      if (task.completed) return false; // Remove completed tasks
+      if (!task.dueDate) return true; // Tasks with no due date are shown on main screen
+      
+      const taskDueDate = new Date(task.dueDate);
+      taskDueDate.setHours(0, 0, 0, 0); // Set to start of day
+      
+      // Only include tasks due today or in the past
+      return taskDueDate <= today;
+    });
+    
     // Get all categories from the tasks
     const categories = new Set<string>();
-    tasks.forEach(task => {
+    filteredTasks.forEach(task => {
       if (task.category) {
         categories.add(task.category);
       }
@@ -82,26 +111,49 @@ export default function TasksScreen() {
     // Create sections for each category
     const sections = Array.from(categories).map(category => {
       // Filter tasks by this category
-      const tasksInCategory = tasks.filter(task => task.category === category);
+      const tasksInCategory = filteredTasks.filter(task => task.category === category);
       
       return {
         title: category,
-        data: tasksInCategory
+        data: tasksInCategory,
+        collapsed: collapsedCategories[category] || false
       };
     });
     
     // Add uncategorized tasks section
-    const uncategorizedTasks = tasks.filter(task => !task.category);
+    const uncategorizedTasks = filteredTasks.filter(task => !task.category);
     if (uncategorizedTasks.length > 0) {
       sections.push({
         title: 'Uncategorized',
-        data: uncategorizedTasks
+        data: uncategorizedTasks,
+        collapsed: collapsedCategories['Uncategorized'] || false
       });
     }
     
     // Only return sections that have tasks
     return sections.filter(section => section.data.length > 0);
-  }, [tasks]);
+  }, [tasks, collapsedCategories]);
+
+  // Group completed tasks in their own section
+  const completedTasks = useMemo(() => {
+    // Filter to only include completed tasks
+    const filtered = tasks.filter(task => task.completed);
+    
+    if (filtered.length === 0) {
+      return [];
+    }
+    
+    return [{
+      title: 'Completed',
+      data: filtered,
+      collapsed: isCompletedCollapsed
+    }];
+  }, [tasks, isCompletedCollapsed]);
+
+  // Combine all sections
+  const allSections = useMemo(() => {
+    return [...groupedTasks, ...completedTasks];
+  }, [groupedTasks, completedTasks]);
   
   const handleAddTask = () => {
     setSelectedTask(undefined);
@@ -135,6 +187,11 @@ export default function TasksScreen() {
     
     setIsFormVisible(false);
   };
+  
+  // Custom handler for task completion to auto-move tasks
+  const handleToggleComplete = (taskId: string) => {
+    toggleTaskStatus(taskId);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -146,39 +203,77 @@ export default function TasksScreen() {
       </View>
       
       {/* Tasks list or empty state */}
-      {groupedTasks.length === 0 ? (
+      {allSections.length === 0 ? (
         <EmptyState message="No tasks found. Add a new task!" />
       ) : (
         <SectionList
-          sections={groupedTasks}
+          sections={allSections}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TaskItem
-              task={item}
-              onToggleComplete={toggleTaskStatus}
-              onDelete={deleteTask}
-              onPress={handleTaskPress}
-              onEdit={handleEditTask}
-            />
-          )}
-          renderSectionHeader={({ section: { title } }) => (
-            <View style={[
-              styles.sectionHeader, 
-              { 
-                backgroundColor: colors.background,
-                borderLeftWidth: 4,
-                borderLeftColor: categoryColors[title as keyof typeof categoryColors] || colors.gray
-              }
-            ]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
-            </View>
-          )}
+          renderItem={({ item, section }) => {
+            // Only render items if the section is not collapsed
+            if (section.collapsed) return null;
+            return (
+              <TaskItem
+                task={item}
+                onToggleComplete={handleToggleComplete}
+                onDelete={deleteTask}
+                onPress={handleTaskPress}
+                onEdit={handleEditTask}
+              />
+            );
+          }}
+          renderSectionHeader={({ section }) => {
+            const isCompletedSection = section.title === 'Completed';
+            const borderColor = isCompletedSection
+              ? colors.success
+              : categoryColors[section.title as keyof typeof categoryColors] || colors.gray;
+                  
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.sectionHeader, 
+                  { 
+                    backgroundColor: colors.background,
+                    borderLeftWidth: 4,
+                    borderLeftColor: borderColor
+                  }
+                ]}
+                onPress={() => {
+                  isCompletedSection 
+                    ? toggleCompletedCollapse() 
+                    : toggleCategoryCollapse(section.title);
+                }}
+              >
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  {section.title}
+                </Text>
+                <View style={styles.sectionHeaderRight}>
+                  <Text style={[styles.taskCount, { color: colors.secondaryText }]}>
+                    {section.data.length}
+                  </Text>
+                  <MaterialIcons 
+                    name={section.collapsed ? 'keyboard-arrow-down' : 'keyboard-arrow-up'} 
+                    size={18} 
+                    color={colors.secondaryText} 
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          }}
           stickySectionHeadersEnabled={true}
           contentContainerStyle={styles.listContent}
         />
       )}
       
-      <CapsuleMenu onAddPress={handleAddTask} />
+      {/* Floating Add Button */}
+      <TouchableOpacity
+        style={[styles.floatingButton, { backgroundColor: colors.primary }]}
+        onPress={handleAddTask}
+      >
+        <MaterialIcons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+      
+      <CapsuleMenu />
       
       <TaskForm
         visible={isFormVisible}
@@ -216,11 +311,11 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingVertical: 12,
     backgroundColor: 'transparent',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginVertical: 4,
   },
   sectionTitle: {
@@ -230,8 +325,34 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginLeft: 8,
   },
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  taskCount: {
+    fontSize: 12,
+    marginRight: 4,
+  },
   listContent: {
     paddingBottom: 100,
     paddingTop: 8,
+  },
+  floatingButton: {
+    position: 'absolute',
+    right: 24,
+    bottom: 110,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });

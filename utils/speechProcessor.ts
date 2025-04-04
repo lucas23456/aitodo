@@ -49,9 +49,10 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
       4. Приоритет (high, medium, low - определи исходя из срочности)
       5. Категорию (Work, Personal, Health, Shopping, Education, Finance, Travel, Design, Research, или другую подходящую)
       6. Теги (важные ключевые слова из задачи, рекомендуемые: Urgent, Important, Meeting, Project, Reminder, Design, Feedback, Later, InProgress, Review)
-      7. Срок выполнения (если упоминается конкретная дата, используй её. Если не упоминается - используй сегодняшнюю дату)
+      7. Срок выполнения (если упоминается конкретная дата, используй её и установи год 2025, если год не указан в явном виде. Если дата не упоминается - используй сегодняшнюю дату)
       
       Текст может содержать несколько задач, разбей их правильно.
+      ВАЖНО: Текущий год - 2025. Все упоминания дат без явного указания года должны относиться к 2025 году.
       ВАЖНО: Для всех задач, если срок явно не указан, поставь сегодняшнюю дату.
       Возвращай только JSON-массив с задачами, без преамбул и пояснений.
 
@@ -245,7 +246,25 @@ export async function processVoiceText(text: string): Promise<ProcessedTask[]> {
         if (task.dueDate || task.due_date) {
           try {
             // Пробуем создать дату из указанного значения
-            const parsedDate = new Date(task.dueDate || task.due_date || '');
+            let dateStr = task.dueDate || task.due_date || '';
+            let parsedDate;
+            
+            // Если это строка с датой
+            if (typeof dateStr === 'string') {
+              // Проверяем, содержит ли строка указание года
+              const hasYear = /\b20\d{2}\b/.test(dateStr);
+              
+              // Если год не указан явно, добавляем 2025
+              if (!hasYear && !dateStr.includes('today') && !dateStr.includes('tomorrow')) {
+                dateStr = dateStr + ' 2025';
+              }
+              
+              parsedDate = new Date(dateStr);
+            } else {
+              // Если это не строка (например число), пробуем использовать напрямую
+              parsedDate = new Date(dateStr);
+            }
+            
             // Проверяем, что получилась корректная дата
             if (!isNaN(parsedDate.getTime())) {
               dueDate = parsedDate.toISOString();

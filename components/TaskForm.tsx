@@ -10,16 +10,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   FlatList,
+  Switch,
 } from 'react-native';
 import { format } from 'date-fns';
 import { Task, useTodoStore } from '../store/todoStore';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import Colors from '../constants/Colors';
 import { categoryColors, priorityColors, tagColors } from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
 import TagCreator from './TagCreator';
 import CategoryCreator from './CategoryCreator';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 type TaskFormProps = {
   visible: boolean;
@@ -35,10 +37,10 @@ const CATEGORIES = Object.keys(categoryColors);
 const PRESET_TAGS = Object.keys(tagColors);
 
 // Priority levels
-const PRIORITIES: Array<{ value: 'low' | 'medium' | 'high', label: string }> = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
+const PRIORITIES: Array<{ value: 'low' | 'medium' | 'high', label: string, icon: any }> = [
+  { value: 'low', label: 'Low', icon: 'angle-up' },
+  { value: 'medium', label: 'Medium', icon: 'flag-o' },
+  { value: 'high', label: 'High', icon: 'flag' },
 ];
 
 // CategoryButton component
@@ -81,33 +83,47 @@ const PriorityButton = ({
   selectedPriority, 
   onPress 
 }: { 
-  priority: { value: 'low' | 'medium' | 'high', label: string }, 
+  priority: { value: 'low' | 'medium' | 'high', label: string, icon: any }, 
   selectedPriority: 'low' | 'medium' | 'high', 
   onPress: (value: 'low' | 'medium' | 'high') => void 
 }) => {
   const colorScheme = useColorScheme();
+  const isSelected = selectedPriority === priority.value;
+  const priorityColor = priorityColors[priority.value];
+  
   return (
     <TouchableOpacity
       key={priority.value}
       style={[
         styles.priorityButton,
         { 
-          backgroundColor: selectedPriority === priority.value 
-            ? priorityColors[priority.value] 
-            : 'transparent',
-          borderColor: priorityColors[priority.value],
-          opacity: selectedPriority === priority.value ? 0.9 : 0.7
+          backgroundColor: isSelected ? priorityColor : 'transparent',
+          borderColor: priorityColor,
+          borderWidth: 1.5,
+          opacity: isSelected ? 1 : 0.7,
+          shadowColor: isSelected ? priorityColor : 'transparent',
+          shadowOffset: { width: 0, height: isSelected ? 2 : 0 },
+          shadowOpacity: isSelected ? 0.4 : 0,
+          shadowRadius: isSelected ? 3 : 0,
+          elevation: isSelected ? 3 : 0
         }
       ]}
       onPress={() => onPress(priority.value)}
     >
+      <FontAwesome 
+        name={priority.icon} 
+        size={18} 
+        color={isSelected ? (colorScheme === 'dark' ? '#000' : 'white') : priorityColor} 
+        style={styles.priorityIcon}
+      />
       <Text
         style={[
           styles.priorityText,
           { 
-            color: selectedPriority === priority.value
+            color: isSelected
               ? colorScheme === 'dark' ? '#000' : 'white'
-              : priorityColors[priority.value] 
+              : priorityColor,
+            fontWeight: isSelected ? '700' : '500'
           }
         ]}
       >
@@ -169,6 +185,20 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
   const [showTagCreator, setShowTagCreator] = useState(false);
   const [showCategoryCreator, setShowCategoryCreator] = useState(false);
   
+  // Новые состояния для даты и времени
+  const [dueDate, setDueDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timeEnabled, setTimeEnabled] = useState(false);
+  const [dueTime, setDueTime] = useState('12:00');
+  
+  // Состояния для повторяемости
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatType, setRepeatType] = useState<'daily' | 'weekly' | 'monthly' | 'none'>('none');
+  const [repeatInterval, setRepeatInterval] = useState(1);
+  const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
+  const [showRepeatEndDatePicker, setShowRepeatEndDatePicker] = useState(false);
+  
   // Get custom tags and categories from store
   const customTags = useTodoStore((state) => state.customTags);
   const customCategories = useTodoStore((state) => state.customCategories);
@@ -188,6 +218,36 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
         setCategory(initialTask.category || '');
         setPriority(initialTask.priority || 'medium');
         setTags(initialTask.tags || []);
+        
+        // Установка даты и времени
+        if (initialTask.dueDate) {
+          setDueDate(new Date(initialTask.dueDate));
+        }
+        
+        if (initialTask.dueTime) {
+          setTimeEnabled(true);
+          setDueTime(initialTask.dueTime);
+        } else {
+          setTimeEnabled(false);
+          setDueTime('12:00');
+        }
+        
+        // Установка повторяемости
+        if (initialTask.repeat && initialTask.repeat.type !== 'none') {
+          setRepeatEnabled(true);
+          setRepeatType(initialTask.repeat.type);
+          setRepeatInterval(initialTask.repeat.interval);
+          if (initialTask.repeat.endDate) {
+            setRepeatEndDate(new Date(initialTask.repeat.endDate));
+          } else {
+            setRepeatEndDate(null);
+          }
+        } else {
+          setRepeatEnabled(false);
+          setRepeatType('none');
+          setRepeatInterval(1);
+          setRepeatEndDate(null);
+        }
       } else {
         resetForm();
       }
@@ -200,21 +260,83 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
     setCategory('');
     setPriority('medium');
     setTags([]);
+    
+    // Сбрасываем новые поля
+    setDueDate(new Date());
+    setTimeEnabled(false);
+    setDueTime('12:00');
+    setRepeatEnabled(false);
+    setRepeatType('none');
+    setRepeatInterval(1);
+    setRepeatEndDate(null);
+  };
+  
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDueDate(selectedDate);
+    }
+  };
+  
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(false);
+    if (selectedTime) {
+      const hours = selectedTime.getHours().toString().padStart(2, '0');
+      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
+      setDueTime(`${hours}:${minutes}`);
+    }
+  };
+  
+  const handleRepeatEndDateChange = (event: any, selectedDate?: Date) => {
+    setShowRepeatEndDatePicker(false);
+    if (selectedDate) {
+      setRepeatEndDate(selectedDate);
+    }
+  };
+
+  const toggleTimeEnabled = (value: boolean) => {
+    setTimeEnabled(value);
+    // Если время отключено, сбрасываем его значение
+    if (!value) {
+      setDueTime('12:00');
+    }
+  };
+  
+  const toggleRepeatEnabled = (value: boolean) => {
+    setRepeatEnabled(value);
+    // Если повторение отключено, сбрасываем его значения
+    if (!value) {
+      setRepeatType('none');
+      setRepeatInterval(1);
+      setRepeatEndDate(null);
+    }
   };
   
   const handleSubmit = () => {
     if (!title.trim()) return;
     
-    onSubmit({
+    // Подготавливаем объект задачи с новыми полями
+    const task: Omit<Task, 'id' | 'createdAt'> = {
       title: title.trim(),
       description: description.trim(),
-      dueDate: new Date().toISOString(), // Set default current date
+      dueDate: dueDate.toISOString(),
+      dueTime: timeEnabled ? dueTime : undefined,
       completed: initialTask ? initialTask.completed : false,
       category,
       priority,
       tags,
-    });
+    };
     
+    // Добавляем поле повторяемости, если включено
+    if (repeatEnabled && repeatType !== 'none') {
+      task.repeat = {
+        type: repeatType,
+        interval: repeatInterval,
+        endDate: repeatEndDate ? repeatEndDate.toISOString() : undefined,
+      };
+    }
+    
+    onSubmit(task);
     resetForm();
     onClose();
   };
@@ -293,6 +415,80 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               onChangeText={setDescription}
             />
             
+            {/* Due Date & Time */}
+            <Text style={[styles.label, { color: colors.text }]}>Due Date</Text>
+            <TouchableOpacity
+              style={[
+                styles.dateButton,
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                  borderColor: colors.border,
+                }
+              ]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={{ color: colors.text }}>
+                {format(dueDate, 'EEEE, MMMM d, yyyy')}
+              </Text>
+              <MaterialIcons name="calendar-today" size={24} color={colors.primary} />
+            </TouchableOpacity>
+            
+            {showDatePicker && (
+              <DateTimePicker
+                value={dueDate}
+                mode="date"
+                display="default"
+                onChange={handleDateChange}
+              />
+            )}
+
+            {/* Time Toggle */}
+            <View style={styles.switchRow}>
+              <Text style={[styles.label, { color: colors.text }]}>Set Time</Text>
+              <Switch
+                value={timeEnabled}
+                onValueChange={toggleTimeEnabled}
+                trackColor={{ false: colors.gray, true: colors.primary }}
+                thumbColor={timeEnabled ? colors.primary : colors.gray}
+              />
+            </View>
+
+            {/* Time Picker (отображается только если timeEnabled=true) */}
+            {timeEnabled && (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.dateButton,
+                    { 
+                      backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                      borderColor: colors.border,
+                      marginTop: 10,
+                    }
+                  ]}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Text style={{ color: colors.text }}>
+                    {dueTime}
+                  </Text>
+                  <MaterialIcons name="access-time" size={24} color={colors.primary} />
+                </TouchableOpacity>
+                
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={(() => {
+                      const date = new Date();
+                      const [hours, minutes] = dueTime.split(':').map(Number);
+                      date.setHours(hours, minutes, 0, 0);
+                      return date;
+                    })()}
+                    mode="time"
+                    display="default"
+                    onChange={handleTimeChange}
+                  />
+                )}
+              </>
+            )}
+            
             {/* Priority */}
             <Text style={[styles.label, { color: colors.text }]}>Priority</Text>
             <View style={styles.priorityContainer}>
@@ -325,9 +521,9 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               showsHorizontalScrollIndicator={false}
               style={styles.categoriesContainer}
             >
-              {allCategories.map((cat) => (
+              {allCategories.map((cat, index) => (
                 <CategoryButton
-                  key={cat}
+                  key={`${cat}-${index}`}
                   cat={cat}
                   selectedCategory={category}
                   onPress={setCategory}
@@ -350,15 +546,161 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
             </View>
             
             <View style={styles.tagsContainer}>
-              {allTags.map((tag) => (
+              {allTags.map((tag, index) => (
                 <TagButton
-                  key={tag}
+                  key={`${tag}-${index}`}
                   tag={tag}
                   selectedTags={tags}
                   onPress={toggleTag}
                 />
               ))}
             </View>
+            
+            {/* Repeating Tasks Section */}
+            <View style={styles.switchRow}>
+              <Text style={[styles.label, { color: colors.text }]}>Repeating Task</Text>
+              <Switch
+                value={repeatEnabled}
+                onValueChange={toggleRepeatEnabled}
+                trackColor={{ false: colors.gray, true: colors.primary }}
+                thumbColor={repeatEnabled ? colors.primary : colors.gray}
+              />
+            </View>
+            
+            {repeatEnabled && (
+              <View style={styles.repeatContainer}>
+                {/* Repeat Type Selector */}
+                <Text style={[styles.sublabel, { color: colors.text }]}>Repeat every</Text>
+                <View style={styles.repeatTypeContainer}>
+                  <TextInput
+                    style={[
+                      styles.intervalInput,
+                      { 
+                        color: colors.text,
+                        backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                        borderColor: colors.border,
+                      }
+                    ]}
+                    value={repeatInterval.toString()}
+                    onChangeText={(text) => {
+                      const value = parseInt(text);
+                      if (!isNaN(value) && value > 0) {
+                        setRepeatInterval(value);
+                      } else if (text === '') {
+                        setRepeatInterval(1);
+                      }
+                    }}
+                    keyboardType="numeric"
+                  />
+                  
+                  <View style={styles.repeatTypeSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.repeatTypeButton,
+                        { 
+                          backgroundColor: repeatType === 'daily' 
+                            ? colors.primary 
+                            : colorScheme === 'dark' ? colors.lightGray : '#F0F0F5'
+                        }
+                      ]}
+                      onPress={() => setRepeatType('daily')}
+                    >
+                      <Text style={{ 
+                        color: repeatType === 'daily' ? 'white' : colors.text
+                      }}>Daily</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.repeatTypeButton,
+                        { 
+                          backgroundColor: repeatType === 'weekly' 
+                            ? colors.primary 
+                            : colorScheme === 'dark' ? colors.lightGray : '#F0F0F5'
+                        }
+                      ]}
+                      onPress={() => setRepeatType('weekly')}
+                    >
+                      <Text style={{ 
+                        color: repeatType === 'weekly' ? 'white' : colors.text
+                      }}>Weekly</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.repeatTypeButton,
+                        { 
+                          backgroundColor: repeatType === 'monthly' 
+                            ? colors.primary 
+                            : colorScheme === 'dark' ? colors.lightGray : '#F0F0F5'
+                        }
+                      ]}
+                      onPress={() => setRepeatType('monthly')}
+                    >
+                      <Text style={{ 
+                        color: repeatType === 'monthly' ? 'white' : colors.text
+                      }}>Monthly</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                {/* Repeat End Date */}
+                <View style={styles.endDateContainer}>
+                  <Text style={[styles.sublabel, { color: colors.text }]}>End date (optional)</Text>
+                  
+                  {repeatEndDate ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.dateButton,
+                        { 
+                          backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                          borderColor: colors.border,
+                          marginTop: 8,
+                        }
+                      ]}
+                      onPress={() => setShowRepeatEndDatePicker(true)}
+                    >
+                      <Text style={{ color: colors.text }}>
+                        {format(repeatEndDate, 'MMMM d, yyyy')}
+                      </Text>
+                      <View style={{ flexDirection: 'row' }}>
+                        <TouchableOpacity
+                          onPress={() => setRepeatEndDate(null)}
+                          style={{ marginRight: 8 }}
+                        >
+                          <MaterialIcons name="close" size={20} color={colors.error} />
+                        </TouchableOpacity>
+                        <MaterialIcons name="calendar-today" size={20} color={colors.primary} />
+                      </View>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.addEndDateButton,
+                        { 
+                          borderColor: colors.primary,
+                          marginTop: 8,
+                        }
+                      ]}
+                      onPress={() => setShowRepeatEndDatePicker(true)}
+                    >
+                      <MaterialIcons name="add" size={20} color={colors.primary} />
+                      <Text style={{ color: colors.primary, marginLeft: 8 }}>Add end date</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {showRepeatEndDatePicker && (
+                    <DateTimePicker
+                      value={repeatEndDate || new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={handleRepeatEndDateChange}
+                      minimumDate={new Date()} // Не позволяем выбирать даты в прошлом
+                    />
+                  )}
+                </View>
+              </View>
+            )}
             
             {/* Submit Button */}
             <TouchableOpacity
@@ -463,6 +805,7 @@ const styles = StyleSheet.create({
   },
   dateButton: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
@@ -495,16 +838,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   priorityButton: {
-    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
     paddingVertical: 10,
-    marginHorizontal: 4,
-    borderWidth: 2,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    flex: 1,
+  },
+  priorityIcon: {
+    marginRight: 6,
   },
   priorityText: {
-    fontWeight: '600',
     fontSize: 14,
   },
   tagsContainer: {
@@ -550,8 +895,54 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'white',
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  repeatContainer: {
+    marginBottom: 16,
+  },
+  repeatTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  intervalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginRight: 8,
+  },
+  repeatTypeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  repeatTypeButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    marginHorizontal: 4,
+  },
+  endDateContainer: {
+    marginBottom: 16,
+  },
+  addEndDateButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  sublabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
   },
 }); 

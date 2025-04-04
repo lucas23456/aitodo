@@ -381,6 +381,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'white',
   },
   form: {
     flex: 1,
@@ -448,6 +449,7 @@ const styles = StyleSheet.create({
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    backgroundColor: 'white',
   },
   tag: {
     flexDirection: 'row',
@@ -459,7 +461,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   tagText: {
-    color: 'white',
+    color: 'black',
     fontSize: 14,
     fontWeight: '500',
   },

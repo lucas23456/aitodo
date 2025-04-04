@@ -7,6 +7,7 @@ export interface Task {
   title: string;
   description: string;
   dueDate: string;
+  dueTime?: string; // время задачи в формате HH:mm
   completed: boolean;
   createdAt: string;
   category: string;
@@ -15,6 +16,18 @@ export interface Task {
   company?: string;
   estimatedTime?: string;
   projectId?: string;
+  // Повторяемость задачи
+  repeat?: {
+    type: 'daily' | 'weekly' | 'monthly' | 'none';
+    interval: number; // интервал (каждые X дней/недель/месяцев)
+    endDate?: string; // дата окончания повторений (опционально)
+  };
+  // Настройки уведомлений
+  notification?: {
+    enabled: boolean;
+    time: string; // время уведомления в формате ISO или HH:mm
+    beforeMinutes?: number; // за сколько минут до задачи (0 = в момент задачи)
+  };
 }
 
 export interface Project {
@@ -58,7 +71,7 @@ const persistTasks = async (tasks: Task[]) => {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
   } catch (error) {
-    console.error('Error saving tasks:', error);
+    // Ошибка сохранения обрабатывается молча
   }
 };
 
@@ -67,7 +80,7 @@ const persistProjects = async (projects: Project[]) => {
   try {
     await AsyncStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
   } catch (error) {
-    console.error('Error saving projects:', error);
+    // Ошибка сохранения обрабатывается молча
   }
 };
 
@@ -76,7 +89,7 @@ const persistDarkMode = async (isDarkMode: boolean) => {
   try {
     await AsyncStorage.setItem(DARK_MODE_KEY, JSON.stringify(isDarkMode));
   } catch (error) {
-    console.error('Error saving dark mode setting:', error);
+    // Ошибка сохранения обрабатывается молча
   }
 };
 
@@ -85,7 +98,7 @@ const persistCustomTags = async (customTags: string[]) => {
   try {
     await AsyncStorage.setItem(CUSTOM_TAGS_KEY, JSON.stringify(customTags));
   } catch (error) {
-    console.error('Error saving custom tags:', error);
+    // Ошибка сохранения обрабатывается молча
   }
 };
 
@@ -94,56 +107,51 @@ const persistCustomCategories = async (customCategories: string[]) => {
   try {
     await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(customCategories));
   } catch (error) {
-    console.error('Error saving custom categories:', error);
+    // Ошибка сохранения обрабатывается молча
   }
 };
 
 // Initialize the store with data from AsyncStorage
 export const initializeStore = async () => {
   try {
-    console.log('Loading tasks from AsyncStorage...');
+    // Загружаем задачи
     const storedTasks = await AsyncStorage.getItem(STORAGE_KEY);
     if (storedTasks) {
       const parsedTasks = JSON.parse(storedTasks);
-      console.log(`Loaded ${parsedTasks.length} tasks from storage`);
       useTodoStore.setState({ tasks: parsedTasks });
-    } else {
-      console.log('No tasks found in storage');
     }
     
-    console.log('Loading projects from AsyncStorage...');
+    // Загружаем проекты
     const storedProjects = await AsyncStorage.getItem(PROJECTS_KEY);
     if (storedProjects) {
       const parsedProjects = JSON.parse(storedProjects);
-      console.log(`Loaded ${parsedProjects.length} projects from storage`);
       useTodoStore.setState({ projects: parsedProjects });
-    } else {
-      console.log('No projects found in storage');
     }
     
-    console.log('Loading dark mode setting from AsyncStorage...');
+    // Загружаем настройки темной темы
     const storedDarkMode = await AsyncStorage.getItem(DARK_MODE_KEY);
     if (storedDarkMode) {
       const isDarkMode = JSON.parse(storedDarkMode);
-      console.log(`Dark mode setting loaded: ${isDarkMode}`);
       useTodoStore.setState({ isDarkMode });
-    } else {
-      console.log('No dark mode setting found in storage');
     }
     
-    console.log('Loading custom tags from AsyncStorage...');
+    // Загружаем пользовательские теги
     const storedCustomTags = await AsyncStorage.getItem(CUSTOM_TAGS_KEY);
     if (storedCustomTags) {
       const customTags = JSON.parse(storedCustomTags);
-      console.log(`Loaded ${customTags.length} custom tags from storage`);
       useTodoStore.setState({ customTags });
-    } else {
-      console.log('No custom tags found in storage');
+    }
+    
+    // Загружаем пользовательские категории
+    const storedCustomCategories = await AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY);
+    if (storedCustomCategories) {
+      const customCategories = JSON.parse(storedCustomCategories);
+      useTodoStore.setState({ customCategories });
     }
     
     return true;
   } catch (error) {
-    console.error('Error loading data from storage:', error);
+    // Обрабатываем ошибки без логирования
     throw error;
   }
 };
@@ -178,9 +186,75 @@ export const useTodoStore = create<TodoState>((set, get) => ({
   }),
   
   toggleTaskStatus: (taskId) => set((state) => {
-    const updatedTasks = state.tasks.map((task) => 
-      task.id === taskId ? { ...task, completed: !task.completed } : task
+    // Find the task to toggle
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task) return state;
+    
+    // Create a copy of tasks array for modification
+    let updatedTasks = [...state.tasks];
+    
+    // If this is a repeating task being marked as completed
+    if (!task.completed && task.repeat && task.repeat.type !== 'none') {
+      // Calculate the next occurrence date
+      const createNextOccurrence = () => {
+        const currentDate = new Date(task.dueDate);
+        let nextDate = new Date(currentDate);
+        
+        // Calculate the next date based on repeat type and interval
+        switch(task.repeat!.type) {
+          case 'daily':
+            nextDate.setDate(currentDate.getDate() + task.repeat!.interval);
+            break;
+          case 'weekly':
+            nextDate.setDate(currentDate.getDate() + (7 * task.repeat!.interval));
+            break;
+          case 'monthly':
+            // Handle monthly repeats correctly across different month lengths
+            const day = currentDate.getDate();
+            nextDate.setMonth(currentDate.getMonth() + task.repeat!.interval);
+            
+            // Handle cases where the day doesn't exist in the target month
+            const lastDayOfMonth = new Date(
+              nextDate.getFullYear(),
+              nextDate.getMonth() + 1,
+              0
+            ).getDate();
+            
+            if (day > lastDayOfMonth) {
+              nextDate.setDate(lastDayOfMonth);
+            }
+            break;
+        }
+        
+        // Check if we've reached the end date
+        if (task.repeat!.endDate && nextDate > new Date(task.repeat!.endDate)) {
+          return null; // No more occurrences
+        }
+        
+        // Create a new task for the next occurrence
+        const newTask: Task = {
+          ...task,
+          id: Date.now().toString(), // New ID for the new occurrence
+          dueDate: nextDate.toISOString(),
+          completed: false,
+          createdAt: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss"),
+        };
+        
+        return newTask;
+      };
+      
+      // Create the next occurrence and add it to the task list if not null
+      const nextOccurrence = createNextOccurrence();
+      if (nextOccurrence) {
+        updatedTasks.push(nextOccurrence);
+      }
+    }
+    
+    // Toggle the completed status of the original task
+    updatedTasks = updatedTasks.map((t) => 
+      t.id === taskId ? { ...t, completed: !t.completed } : t
     );
+    
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
   }),

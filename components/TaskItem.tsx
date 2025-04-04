@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { AntDesign, MaterialIcons } from '@expo/vector-icons';
+import { AntDesign, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { categoryColors, priorityColors, getTagColor } from '../constants/Colors';
 import { useColorScheme } from '../components/useColorScheme';
@@ -59,7 +59,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
         <Animated.View style={{ transform: [{ translateX: trans }] }}>
           <TouchableOpacity 
             style={[styles.action, { backgroundColor: colors.success }]}
-            onPress={() => onToggleComplete(task.id)}
+            onPress={() => handleToggleComplete()}
           >
             <MaterialIcons name={task.completed ? "replay" : "check"} size={24} color="white" />
           </TouchableOpacity>
@@ -93,6 +93,24 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
     return task.priority ? priorityColors[task.priority] : priorityColors.medium;
   };
 
+  // Get priority icon name based on level
+  const getPriorityIcon = () => {
+    switch(task.priority) {
+      case 'high':
+        return 'flag';
+      case 'medium':
+        return 'flag-o';
+      case 'low':
+      default:
+        return 'angle-up';
+    }
+  };
+
+  // Get priority label
+  const getPriorityLabel = () => {
+    return task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
+  };
+
   // Get category color
   const getCategoryColor = () => {
     return task.category && categoryColors[task.category as keyof typeof categoryColors] 
@@ -100,10 +118,24 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
       : categoryColors.Other;
   };
   
+  // Handle task completion with notification for completed tasks
+  const handleToggleComplete = () => {
+    onToggleComplete(task.id);
+    
+    // If completing a task on the main screen, no need to alert (it's handled by the section move)
+    // If on the upcoming screen, alert is useful
+    if (!task.completed && isUpcomingScreen) {
+      // We don't need to show an alert here as it will be handled by the toggle in the parent component
+    }
+  };
+  
   // Display simple task view instead of the full-featured one to match the design
   if (true) {
     return (
-      <View style={styles.minimalContainer}>
+      <View style={[
+        styles.minimalContainer,
+        task.completed && styles.completedTaskContainer
+      ]}>
         <View style={styles.checkboxContainer}>
           <TouchableOpacity
             style={[
@@ -113,7 +145,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
                 borderWidth: 1 
               }
             ]}
-            onPress={() => onToggleComplete(task.id)}
+            onPress={handleToggleComplete}
           >
             {task.completed && (
               <MaterialIcons name="check" size={14} color={colors.text} />
@@ -123,18 +155,28 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
         
         <View style={styles.contentContainer}>
           <TouchableOpacity onPress={() => onPress(task)}>
-            <Text 
-              style={[
-                styles.taskTitle, 
-                { 
-                  color: colors.text,
-                  textDecorationLine: task.completed ? 'line-through' : 'none' 
-                }
-              ]}
-              numberOfLines={2}
-            >
-              {task.title}
-            </Text>
+            <View style={styles.titleRow}>
+              <Text 
+                style={[
+                  styles.taskTitle, 
+                  { 
+                    color: colors.text,
+                    textDecorationLine: task.completed ? 'line-through' : 'none' 
+                  }
+                ]}
+                numberOfLines={2}
+              >
+                {task.title}
+              </Text>
+              <View style={styles.priorityContainer}>
+                <FontAwesome 
+                  name={getPriorityIcon()} 
+                  size={12} 
+                  color={getPriorityColor()} 
+                  style={styles.priorityIcon}
+                />
+              </View>
+            </View>
             
             {/* Show description if available */}
             {task.description ? (
@@ -163,22 +205,66 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
               </View>
             )}
             
-            {/* Show due date only on the upcoming screen */}
-            {task.dueDate && isUpcomingScreen ? (
-              <View style={styles.dateContainer}>
-                <MaterialIcons name="event" size={12} color={colors.secondaryText} />
-                <Text style={[styles.dateText, { color: colors.secondaryText }]}>
-                  {formatDueDate(task.dueDate)}
+            <View style={styles.detailsRow}>
+              {/* Show due date only on the upcoming screen or for completed tasks */}
+              {task.dueDate && (isUpcomingScreen || task.completed) ? (
+                <View style={styles.dateContainer}>
+                  <MaterialIcons name="event" size={12} color={colors.secondaryText} />
+                  <Text style={[styles.dateText, { color: colors.secondaryText }]}>
+                    {formatDueDate(task.dueDate)}
+                  </Text>
+                  {/* Repeating task indicator */}
+                  {task.repeat && task.repeat.type !== 'none' && (
+                    <MaterialIcons name="repeat" size={12} color={colors.secondaryText} style={styles.repeatIcon} />
+                  )}
+                </View>
+              ) : null}
+              
+              {/* Enhanced Priority indicator with badge */}
+              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor() }]}>
+                <FontAwesome 
+                  name={getPriorityIcon()} 
+                  size={12} 
+                  color="white" 
+                  style={styles.priorityBadgeIcon}
+                />
+                <Text style={styles.priorityBadgeText}>
+                  {getPriorityLabel()}
                 </Text>
               </View>
-            ) : null}
+              
+              {/* Show repeat indicator on the today screen as well */}
+              {isTodayScreen && task.repeat && task.repeat.type !== 'none' && (
+                <View style={styles.dateContainer}>
+                  <MaterialIcons name="repeat" size={12} color={colors.secondaryText} />
+                  <Text style={[styles.dateText, { color: colors.secondaryText }]}>
+                    {task.repeat.type === 'daily' ? 'Daily' : 
+                     task.repeat.type === 'weekly' ? 'Weekly' : 'Monthly'}
+                    {task.repeat.interval > 1 ? ` (${task.repeat.interval})` : ''}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
         
-        <View style={styles.timeContainer}>
-          <Text style={[styles.timeText, { color: colors.secondaryText }]}>
-            {task.estimatedTime || '30 min'}
-          </Text>
+        <View style={styles.actionsContainer}>
+          {/* Edit button */}
+          {onEdit && (
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => onEdit(task)}
+            >
+              <MaterialIcons name="edit" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+          
+          {/* Time display */}
+          <View style={styles.timeContainer}>
+            <Text style={[styles.timeText, { color: colors.secondaryText }]}>
+              {task.estimatedTime || '30 min'}
+            </Text>
+          </View>
         </View>
       </View>
     );
@@ -204,7 +290,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
               borderColor: task.completed ? colors.success : colors.gray,
               backgroundColor: task.completed ? colors.success : 'transparent'
             }]}
-            onPress={() => onToggleComplete(task.id)}
+            onPress={handleToggleComplete}
           >
             {task.completed && <AntDesign name="check" size={16} color={colorScheme === 'dark' ? '#000' : 'white'} />}
           </TouchableOpacity>
@@ -234,12 +320,15 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
             </Text>
             
             {/* Priority indicator */}
-            <View 
-              style={[
-                styles.priorityIndicator, 
-                { backgroundColor: getPriorityColor(), opacity: 0.8 }
-              ]} 
-            />
+            <View style={styles.enhancedPriorityIndicator}>
+              <FontAwesome name={getPriorityIcon()} size={14} color={task.completed ? colors.gray : getPriorityColor()} />
+              <View 
+                style={[
+                  styles.priorityIndicator, 
+                  { backgroundColor: getPriorityColor(), opacity: task.completed ? 0.4 : 0.8 }
+                ]} 
+              />
+            </View>
           </View>
           
           {/* Tags row */}
@@ -341,6 +430,11 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+    marginLeft: 4,
+  },
+  enhancedPriorityIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginLeft: 8,
   },
   tagsContainer: {
@@ -405,6 +499,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
   },
+  completedTaskContainer: {
+    opacity: 0.7,
+  },
   checkboxContainer: {
     marginRight: 12,
   },
@@ -413,9 +510,18 @@ const styles = StyleSheet.create({
   },
   taskTitle: {
     fontSize: 14,
+    flex: 1,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editButton: {
+    padding: 6,
+    borderRadius: 20,
   },
   timeContainer: {
-    marginLeft: 12,
+    paddingHorizontal: 8,
   },
   timeText: {
     fontSize: 12,
@@ -427,7 +533,7 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginRight: 12,
   },
   dateText: {
     fontSize: 12,
@@ -449,5 +555,45 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: '500',
+  },
+  repeatIcon: {
+    marginLeft: 4,
+  },
+  priorityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  priorityIcon: {
+    marginRight: 2,
+  },
+  priorityTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  priorityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  priorityBadgeIcon: {
+    marginRight: 4,
+  },
+  priorityBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
   },
 }); 

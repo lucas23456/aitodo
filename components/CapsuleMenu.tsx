@@ -5,11 +5,9 @@ import { router, usePathname } from 'expo-router';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from './useColorScheme';
 
-type CapsuleMenuProps = {
-  onAddPress?: () => void;
-};
+type CapsuleMenuProps = {};
 
-export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
+export default function CapsuleMenu({}: CapsuleMenuProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const currentPath = usePathname();
@@ -28,16 +26,6 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
     } else if (path === '/profile') {
       router.push('/profile');
     } else if (path === '/voice-input') {
-      router.push('/voice-input');
-    }
-  };
-
-  const handleAddTask = () => {
-    // If we're on the main screen and onAddPress is provided, use it
-    if (isHomeActive && onAddPress) {
-      onAddPress();
-    } else {
-      // Otherwise go to voice input as a fallback
       router.push('/voice-input');
     }
   };
@@ -64,17 +52,6 @@ export default function CapsuleMenu({ onAddPress }: CapsuleMenuProps) {
             name="event" 
             size={24} 
             color={isUpcomingActive ? colors.primary : colors.text} 
-          />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.addButtonWrapper, { backgroundColor: '#000000' }]}
-          onPress={handleAddTask}
-        >
-          <MaterialIcons 
-            name="add" 
-            size={28} 
-            color="#FFFFFF" 
           />
         </TouchableOpacity>
         
@@ -134,21 +111,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 8,
-  },
-  addButtonWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 5,
   },
 }); 

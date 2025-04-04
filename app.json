@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "minimind",
-    "slug": "minimind",
+    "slug": "voice-todo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -65,6 +65,19 @@
       },
       "eas": {
         "projectId": "7eb5a73f-a3bc-4056-ab38-0558597aa62e"
+      }
+    }
+  },
+  "build": {
+    "development": {
+      "android": {
+        "buildType": "apk",
+        "developmentClient": true
+      }
+    },
+    "preview": {
+      "android": {
+        "buildType": "apk"
       }
     }
   }
