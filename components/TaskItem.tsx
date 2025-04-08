@@ -8,7 +8,6 @@ import { useColorScheme } from '../components/useColorScheme';
 import { Task } from '../store/todoStore';
 import { format, isToday, isTomorrow, isPast } from 'date-fns';
 import { usePathname } from 'expo-router';
-import { useTodoStore } from '../store/todoStore';
 
 type TaskItemProps = {
   task: Task;
@@ -20,8 +19,7 @@ type TaskItemProps = {
 
 export default function TaskItem({ task, onToggleComplete, onDelete, onPress, onEdit }: TaskItemProps) {
   const colorScheme = useColorScheme();
-  const isDarkMode = useTodoStore((state) => state.isDarkMode);
-  const colors = Colors[isDarkMode ? 'dark' : 'light'];
+  const colors = Colors[colorScheme ?? 'light'];
   const pathname = usePathname();
   
   // Check if we're on the today screen (index) or upcoming screen
@@ -162,7 +160,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
                 style={[
                   styles.taskTitle, 
                   { 
-                    color: isDarkMode ? '#FFFFFF' : colors.text,
+                    color: colors.text,
                     textDecorationLine: task.completed ? 'line-through' : 'none' 
                   }
                 ]}
@@ -170,6 +168,14 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
               >
                 {task.title}
               </Text>
+              <View style={styles.priorityContainer}>
+                <FontAwesome 
+                  name={getPriorityIcon()} 
+                  size={12} 
+                  color={getPriorityColor()} 
+                  style={styles.priorityIcon}
+                />
+              </View>
             </View>
             
             {/* Show description if available */}
@@ -252,6 +258,13 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
               <MaterialIcons name="edit" size={16} color={colors.primary} />
             </TouchableOpacity>
           )}
+          
+          {/* Time display */}
+          <View style={styles.timeContainer}>
+            <Text style={[styles.timeText, { color: colors.secondaryText }]}>
+              {task.estimatedTime || '30 min'}
+            </Text>
+          </View>
         </View>
       </View>
     );
@@ -298,7 +311,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete, onPress, on
             <Text 
               style={[
                 styles.title, 
-                { color: isDarkMode ? '#FFFFFF' : colors.text },
+                { color: colors.text },
                 task.completed && styles.completedText
               ]}
               numberOfLines={1}

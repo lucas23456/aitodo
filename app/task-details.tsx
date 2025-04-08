@@ -187,7 +187,7 @@ export default function TaskDetailsScreen() {
               <Text style={styles.categoryText}>{task.category}</Text>
             </View>
           )}
-          <Text style={[styles.title, { color: isDarkMode ? '#FFFFFF' : colors.text }]}>{task.title}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{task.title}</Text>
           
           {/* Enhanced Priority badge */}
           <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor() }]}>

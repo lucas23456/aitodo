@@ -9,8 +9,7 @@ import {
   Modal,
   SafeAreaView,
   Platform,
-  Alert,
-  Switch
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -169,29 +168,30 @@ export default function ProfileScreen() {
         
         <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
           {/* Dark Mode Setting */}
-          <View style={styles.settingRow}>
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={toggleDarkMode}
+          >
             <View style={styles.settingLabelContainer}>
               <MaterialIcons 
                 name={isDarkMode ? "nightlight-round" : "wb-sunny"} 
                 size={22} 
-                color={isDarkMode ? colors.primary : '#FFC107'} 
+                color={colors.text} 
               />
               <Text style={[styles.settingLabel, { color: colors.text }]}>
                 Dark Mode
               </Text>
             </View>
-            <Switch
-              trackColor={{ 
-                false: isDarkMode ? '#333333' : '#D9D9D9', 
-                true: isDarkMode ? 'rgba(125, 187, 245, 0.5)' : '#81b0ff' 
-              }}
-              thumbColor={isDarkMode ? colors.primary : '#f4f3f4'}
-              ios_backgroundColor={isDarkMode ? '#333333' : '#D9D9D9'}
-              onValueChange={toggleDarkMode}
-              value={isDarkMode}
-              style={{ transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }] }}
-            />
-          </View>
+            <View style={[
+              styles.toggleSwitch, 
+              { backgroundColor: isDarkMode ? colors.primary : colors.gray }
+            ]}>
+              <View style={[
+                styles.toggleKnob, 
+                { transform: [{ translateX: isDarkMode ? 20 : 0 }] }
+              ]} />
+            </View>
+          </TouchableOpacity>
           
           {/* Delete All Tasks Setting */}
           <TouchableOpacity
@@ -636,5 +636,17 @@ const styles = StyleSheet.create({
   },
   settingDescription: {
     fontSize: 14,
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    padding: 5,
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'white',
   },
 }); 
