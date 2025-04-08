@@ -1,25 +1,57 @@
 import React from 'react';
-import { StyleSheet, View, Text, Switch, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, Switch, TouchableOpacity, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useTodoStore } from '@/store/todoStore';
 import Colors from '@/constants/Colors';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function SettingsScreen() {
   const isDarkMode = useTodoStore((state) => state.isDarkMode);
   const toggleDarkMode = useTodoStore((state) => state.toggleDarkMode);
-  
+  const { signOut, session } = useAuth();
+
   const colors = Colors[isDarkMode ? 'dark' : 'light'];
-  
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Sign Out",
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-      
+
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Settings</Text>
+        {session?.user && (
+          <Text style={[styles.email, { color: colors.gray }]}>
+            {session.user.email}
+          </Text>
+        )}
       </View>
-      
+
       <ScrollView style={styles.content}>
+        {/* Appearance Settings */}
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.settingRow}>
             <View style={styles.settingInfo}>
@@ -35,7 +67,7 @@ export default function SettingsScreen() {
               thumbColor={'#fff'}
             />
           </View>
-          
+
           <TouchableOpacity style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <View style={styles.iconContainer}>
@@ -45,7 +77,7 @@ export default function SettingsScreen() {
             </View>
             <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <View style={styles.iconContainer}>
@@ -56,7 +88,49 @@ export default function SettingsScreen() {
             <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
           </TouchableOpacity>
         </View>
-        
+
+        {/* Account Settings */}
+        <View style={[styles.card, { backgroundColor: colors.card, marginTop: 20 }]}>
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => Alert.alert('Account Info', 'Account settings will be available soon.')}
+          >
+            <View style={styles.settingInfo}>
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="person" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.settingText, { color: colors.text }]}>Account Settings</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => Alert.alert('Security', 'Security settings will be available soon.')}
+          >
+            <View style={styles.settingInfo}>
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="security" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.settingText, { color: colors.text }]}>Security</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={handleSignOut}
+          >
+            <View style={styles.settingInfo}>
+              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 59, 48, 0.1)' }]}>
+                <MaterialIcons name="logout" size={24} color="#FF3B30" />
+              </View>
+              <Text style={[styles.settingText, { color: '#FF3B30' }]}>Sign Out</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Help and Support */}
         <View style={[styles.card, { backgroundColor: colors.card, marginTop: 20 }]}>
           <TouchableOpacity style={styles.settingRow}>
             <View style={styles.settingInfo}>
@@ -67,7 +141,7 @@ export default function SettingsScreen() {
             </View>
             <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.settingRow}>
             <View style={styles.settingInfo}>
               <View style={styles.iconContainer}>
@@ -78,8 +152,8 @@ export default function SettingsScreen() {
             <MaterialIcons name="chevron-right" size={24} color={colors.gray} />
           </TouchableOpacity>
         </View>
-        
-        <Text style={[styles.version, { color: colors.gray }]}>VoiceTodo v1.0.0</Text>
+
+        <Text style={[styles.version, { color: colors.gray }]}>minimind v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -97,6 +171,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
+  },
+  email: {
+    fontSize: 14,
+    marginTop: 4,
   },
   content: {
     flex: 1,

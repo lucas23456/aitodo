@@ -38,9 +38,21 @@ export interface Project {
   createdAt: string;
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  tags: string[];
+  category: string;
+  audioUri?: string; // URI to the recorded audio file if available
+}
+
 interface TodoState {
   tasks: Task[];
   projects: Project[];
+  notes: Note[];
   isDarkMode: boolean;
   customTags: string[];
   customCategories: string[];
@@ -58,6 +70,11 @@ interface TodoState {
   deleteCustomTag: (tag: string) => void;
   addCustomCategory: (category: string) => void;
   deleteCustomCategory: (category: string) => void;
+  // Notes functions
+  addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateNote: (note: Note) => void;
+  deleteNote: (noteId: string) => void;
+  getAllNotes: () => Note[];
 }
 
 const STORAGE_KEY = '@todo_app_tasks';
@@ -65,6 +82,7 @@ const PROJECTS_KEY = '@todo_app_projects';
 const DARK_MODE_KEY = '@todo_app_dark_mode';
 const CUSTOM_TAGS_KEY = '@todo_app_custom_tags';
 const CUSTOM_CATEGORIES_KEY = '@todo_app_custom_categories';
+const NOTES_KEY = '@todo_app_notes';
 
 // Helper function to persist tasks to AsyncStorage
 const persistTasks = async (tasks: Task[]) => {
@@ -111,6 +129,15 @@ const persistCustomCategories = async (customCategories: string[]) => {
   }
 };
 
+// Helper function to persist notes to AsyncStorage
+const persistNotes = async (notes: Note[]) => {
+  try {
+    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  } catch (error) {
+    // Silent error handling
+  }
+};
+
 // Initialize the store with data from AsyncStorage
 export const initializeStore = async () => {
   try {
@@ -120,35 +147,42 @@ export const initializeStore = async () => {
       const parsedTasks = JSON.parse(storedTasks);
       useTodoStore.setState({ tasks: parsedTasks });
     }
-    
+
     // Загружаем проекты
     const storedProjects = await AsyncStorage.getItem(PROJECTS_KEY);
     if (storedProjects) {
       const parsedProjects = JSON.parse(storedProjects);
       useTodoStore.setState({ projects: parsedProjects });
     }
-    
+
     // Загружаем настройки темной темы
     const storedDarkMode = await AsyncStorage.getItem(DARK_MODE_KEY);
     if (storedDarkMode) {
       const isDarkMode = JSON.parse(storedDarkMode);
       useTodoStore.setState({ isDarkMode });
     }
-    
+
     // Загружаем пользовательские теги
     const storedCustomTags = await AsyncStorage.getItem(CUSTOM_TAGS_KEY);
     if (storedCustomTags) {
       const customTags = JSON.parse(storedCustomTags);
       useTodoStore.setState({ customTags });
     }
-    
+
     // Загружаем пользовательские категории
     const storedCustomCategories = await AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY);
     if (storedCustomCategories) {
       const customCategories = JSON.parse(storedCustomCategories);
       useTodoStore.setState({ customCategories });
     }
-    
+
+    // Load notes
+    const storedNotes = await AsyncStorage.getItem(NOTES_KEY);
+    if (storedNotes) {
+      const parsedNotes = JSON.parse(storedNotes);
+      useTodoStore.setState({ notes: parsedNotes });
+    }
+
     return true;
   } catch (error) {
     // Обрабатываем ошибки без логирования
@@ -159,10 +193,11 @@ export const initializeStore = async () => {
 export const useTodoStore = create<TodoState>((set, get) => ({
   tasks: [],
   projects: [],
+  notes: [],
   isDarkMode: false,
   customTags: [],
   customCategories: [],
-  
+
   addTask: (task) => set((state) => {
     const newTask: Task = {
       ...task,
@@ -176,32 +211,32 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
   }),
-  
+
   updateTask: (updatedTask) => set((state) => {
-    const updatedTasks = state.tasks.map((task) => 
+    const updatedTasks = state.tasks.map((task) =>
       task.id === updatedTask.id ? updatedTask : task
     );
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
   }),
-  
+
   toggleTaskStatus: (taskId) => set((state) => {
     // Find the task to toggle
     const task = state.tasks.find((t) => t.id === taskId);
     if (!task) return state;
-    
+
     // Create a copy of tasks array for modification
     let updatedTasks = [...state.tasks];
-    
+
     // If this is a repeating task being marked as completed
     if (!task.completed && task.repeat && task.repeat.type !== 'none') {
       // Calculate the next occurrence date
       const createNextOccurrence = () => {
         const currentDate = new Date(task.dueDate);
         let nextDate = new Date(currentDate);
-        
+
         // Calculate the next date based on repeat type and interval
-        switch(task.repeat!.type) {
+        switch (task.repeat!.type) {
           case 'daily':
             nextDate.setDate(currentDate.getDate() + task.repeat!.interval);
             break;
@@ -212,25 +247,25 @@ export const useTodoStore = create<TodoState>((set, get) => ({
             // Handle monthly repeats correctly across different month lengths
             const day = currentDate.getDate();
             nextDate.setMonth(currentDate.getMonth() + task.repeat!.interval);
-            
+
             // Handle cases where the day doesn't exist in the target month
             const lastDayOfMonth = new Date(
               nextDate.getFullYear(),
               nextDate.getMonth() + 1,
               0
             ).getDate();
-            
+
             if (day > lastDayOfMonth) {
               nextDate.setDate(lastDayOfMonth);
             }
             break;
         }
-        
+
         // Check if we've reached the end date
         if (task.repeat!.endDate && nextDate > new Date(task.repeat!.endDate)) {
           return null; // No more occurrences
         }
-        
+
         // Create a new task for the next occurrence
         const newTask: Task = {
           ...task,
@@ -239,43 +274,43 @@ export const useTodoStore = create<TodoState>((set, get) => ({
           completed: false,
           createdAt: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss"),
         };
-        
+
         return newTask;
       };
-      
+
       // Create the next occurrence and add it to the task list if not null
       const nextOccurrence = createNextOccurrence();
       if (nextOccurrence) {
         updatedTasks.push(nextOccurrence);
       }
     }
-    
+
     // Toggle the completed status of the original task
-    updatedTasks = updatedTasks.map((t) => 
+    updatedTasks = updatedTasks.map((t) =>
       t.id === taskId ? { ...t, completed: !t.completed } : t
     );
-    
+
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
   }),
-  
+
   deleteTask: (taskId) => set((state) => {
     const updatedTasks = state.tasks.filter((task) => task.id !== taskId);
     persistTasks(updatedTasks);
     return { tasks: updatedTasks };
   }),
-  
+
   deleteAllTasks: () => set(() => {
     persistTasks([]);
     return { tasks: [] };
   }),
-  
+
   toggleDarkMode: () => set((state) => {
     const newDarkMode = !state.isDarkMode;
     persistDarkMode(newDarkMode);
     return { isDarkMode: newDarkMode };
   }),
-  
+
   addProject: (project) => set((state) => {
     const newProject: Project = {
       ...project,
@@ -286,54 +321,54 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     persistProjects(updatedProjects);
     return { projects: updatedProjects };
   }),
-  
+
   updateProject: (updatedProject) => set((state) => {
-    const updatedProjects = state.projects.map((project) => 
+    const updatedProjects = state.projects.map((project) =>
       project.id === updatedProject.id ? updatedProject : project
     );
     persistProjects(updatedProjects);
     return { projects: updatedProjects };
   }),
-  
+
   deleteProject: (projectId) => set((state) => {
     const updatedProjects = state.projects.filter(
       (project) => project.id !== projectId
     );
-    
-    const updatedTasks = state.tasks.map((task) => 
-      task.projectId === projectId 
-        ? { ...task, projectId: undefined } 
+
+    const updatedTasks = state.tasks.map((task) =>
+      task.projectId === projectId
+        ? { ...task, projectId: undefined }
         : task
     );
-    
+
     persistProjects(updatedProjects);
     persistTasks(updatedTasks);
-    
-    return { 
+
+    return {
       projects: updatedProjects,
       tasks: updatedTasks
     };
   }),
-  
+
   getProjectTasks: (projectId) => {
     const state = get();
     return state.tasks.filter(task => task.projectId === projectId);
   },
-  
+
   addCustomTag: (tag) => set((state) => {
     // Don't add duplicate tags
     if (state.customTags.includes(tag)) {
       return state;
     }
-    
+
     const updatedTags = [...state.customTags, tag];
     persistCustomTags(updatedTags);
     return { customTags: updatedTags };
   }),
-  
+
   deleteCustomTag: (tag) => set((state) => {
     const updatedTags = state.customTags.filter(t => t !== tag);
-    
+
     // Also remove this tag from any tasks that have it
     const updatedTasks = state.tasks.map(task => {
       if (task.tags.includes(tag)) {
@@ -344,30 +379,30 @@ export const useTodoStore = create<TodoState>((set, get) => ({
       }
       return task;
     });
-    
+
     persistCustomTags(updatedTags);
     persistTasks(updatedTasks);
-    
-    return { 
+
+    return {
       customTags: updatedTags,
       tasks: updatedTasks
     };
   }),
-  
+
   addCustomCategory: (category) => set((state) => {
     // Don't add duplicate categories
     if (state.customCategories.includes(category)) {
       return state;
     }
-    
+
     const updatedCategories = [...state.customCategories, category];
     persistCustomCategories(updatedCategories);
     return { customCategories: updatedCategories };
   }),
-  
+
   deleteCustomCategory: (category) => set((state) => {
     const updatedCategories = state.customCategories.filter(c => c !== category);
-    
+
     // Also remove this category from any tasks that have it
     const updatedTasks = state.tasks.map(task => {
       if (task.category === category) {
@@ -378,13 +413,52 @@ export const useTodoStore = create<TodoState>((set, get) => ({
       }
       return task;
     });
-    
+
     persistCustomCategories(updatedCategories);
     persistTasks(updatedTasks);
-    
-    return { 
+
+    return {
       customCategories: updatedCategories,
       tasks: updatedTasks
     };
   }),
+
+  // Notes functions
+  addNote: (note) => set((state) => {
+    const now = new Date();
+    const formattedNow = format(now, "yyyy-MM-dd'T'HH:mm:ss");
+
+    const newNote: Note = {
+      ...note,
+      id: Date.now().toString(),
+      createdAt: formattedNow,
+      updatedAt: formattedNow,
+      tags: note.tags || [],
+      category: note.category || '',
+    };
+
+    const updatedNotes = [...state.notes, newNote];
+    persistNotes(updatedNotes);
+    return { notes: updatedNotes };
+  }),
+
+  updateNote: (updatedNote) => set((state) => {
+    const now = new Date();
+    updatedNote.updatedAt = format(now, "yyyy-MM-dd'T'HH:mm:ss");
+
+    const updatedNotes = state.notes.map((note) =>
+      note.id === updatedNote.id ? updatedNote : note
+    );
+
+    persistNotes(updatedNotes);
+    return { notes: updatedNotes };
+  }),
+
+  deleteNote: (noteId) => set((state) => {
+    const updatedNotes = state.notes.filter((note) => note.id !== noteId);
+    persistNotes(updatedNotes);
+    return { notes: updatedNotes };
+  }),
+
+  getAllNotes: () => get().notes,
 })); 

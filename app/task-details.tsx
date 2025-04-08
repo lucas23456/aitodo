@@ -6,6 +6,7 @@ import { format, isToday, isTomorrow } from 'date-fns';
 import { useTodoStore, Task } from '@/store/todoStore';
 import TaskForm from '@/components/TaskForm';
 import CapsuleMenu from '@/components/CapsuleMenu';
+import { TaskReminder } from '@/components/TaskReminder';
 import Colors from '@/constants/Colors';
 import { priorityColors, categoryColors, getTagColor } from '@/constants/Colors';
 
@@ -186,7 +187,7 @@ export default function TaskDetailsScreen() {
               <Text style={styles.categoryText}>{task.category}</Text>
             </View>
           )}
-          <Text style={[styles.title, { color: colors.text }]}>{task.title}</Text>
+          <Text style={[styles.title, { color: isDarkMode ? '#FFFFFF' : colors.text }]}>{task.title}</Text>
           
           {/* Enhanced Priority badge */}
           <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor() }]}>
@@ -357,6 +358,15 @@ export default function TaskDetailsScreen() {
               </Text>
             </View>
           </View>
+        </View>
+        
+        {/* Reminders Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>Reminders</Text>
+          <TaskReminder 
+            task={task}
+            onUpdateTask={updateTask}
+          />
         </View>
       </ScrollView>
       

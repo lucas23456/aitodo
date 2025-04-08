@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+// import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerAlt from '../components/DateTimePickerAlt';
 import { format } from 'date-fns';
 import { Picker } from '@react-native-picker/picker';
 import { useTodoStore, Task } from '@/store/todoStore';
@@ -145,7 +146,7 @@ export default function TaskFormModal({ visible, onClose, onSubmit, initialTask 
                   styles.titleInput,
                   { 
                     backgroundColor: colors.card,
-                    color: colors.text,
+                    color: isDarkMode ? '#FFFFFF' : colors.text,
                     borderColor: colors.border
                   }
                 ]}
@@ -199,10 +200,9 @@ export default function TaskFormModal({ visible, onClose, onSubmit, initialTask 
               </TouchableOpacity>
               
               {showDatePicker && (
-                <DateTimePicker
+                <DateTimePickerAlt
                   value={dueDate}
                   mode="date"
-                  display="default"
                   onChange={handleDateChange}
                 />
               )}

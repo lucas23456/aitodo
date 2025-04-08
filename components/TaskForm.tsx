@@ -11,8 +11,9 @@ import {
   Platform,
   FlatList,
   Switch,
+  Button,
 } from 'react-native';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { Task, useTodoStore } from '../store/todoStore';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -21,7 +22,7 @@ import { categoryColors, priorityColors, tagColors } from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
 import TagCreator from './TagCreator';
 import CategoryCreator from './CategoryCreator';
-import DateTimePicker from '@react-native-community/datetimepicker';
+// import DateTimePicker from '@react-native-community/datetimepicker';
 
 type TaskFormProps = {
   visible: boolean;
@@ -175,7 +176,8 @@ const TagButton = ({ tag, selectedTags, onPress }: { tag: string, selectedTags: 
 
 export default function TaskForm({ visible, onClose, onSubmit, initialTask }: TaskFormProps) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const isDarkMode = useTodoStore((state) => state.isDarkMode);
+  const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -187,8 +189,8 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
   
   // Новые состояния для даты и времени
   const [dueDate, setDueDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [showTimePickerModal, setShowTimePickerModal] = useState(false);
   const [timeEnabled, setTimeEnabled] = useState(false);
   const [dueTime, setDueTime] = useState('12:00');
   
@@ -197,7 +199,7 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
   const [repeatType, setRepeatType] = useState<'daily' | 'weekly' | 'monthly' | 'none'>('none');
   const [repeatInterval, setRepeatInterval] = useState(1);
   const [repeatEndDate, setRepeatEndDate] = useState<Date | null>(null);
-  const [showRepeatEndDatePicker, setShowRepeatEndDatePicker] = useState(false);
+  const [showRepeatEndDateModal, setShowRepeatEndDateModal] = useState(false);
   
   // Get custom tags and categories from store
   const customTags = useTodoStore((state) => state.customTags);
@@ -271,27 +273,44 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
     setRepeatEndDate(null);
   };
   
+  // Replace date picker methods
   const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
+    setShowDatePickerModal(false);
     if (selectedDate) {
       setDueDate(selectedDate);
     }
   };
-  
+
   const handleTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(false);
+    setShowTimePickerModal(false);
     if (selectedTime) {
-      const hours = selectedTime.getHours().toString().padStart(2, '0');
-      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
-      setDueTime(`${hours}:${minutes}`);
+      setDueTime(format(selectedTime, 'HH:mm'));
     }
   };
-  
+
   const handleRepeatEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowRepeatEndDatePicker(false);
+    setShowRepeatEndDateModal(false);
     if (selectedDate) {
       setRepeatEndDate(selectedDate);
     }
+  };
+
+  const handleSelectDate = (offset: number) => {
+    const newDate = addDays(new Date(), offset);
+    setDueDate(newDate);
+    setShowDatePickerModal(false);
+  };
+
+  const handleSelectTime = (hours: number, minutes: number) => {
+    const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    setDueTime(timeString);
+    setShowTimePickerModal(false);
+  };
+
+  const handleSelectEndDate = (offset: number) => {
+    const newDate = addDays(new Date(), offset);
+    setRepeatEndDate(newDate);
+    setShowRepeatEndDateModal(false);
   };
 
   const toggleTimeEnabled = (value: boolean) => {
@@ -385,8 +404,8 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               style={[
                 styles.input, 
                 { 
-                  color: colors.text,
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                  color: isDarkMode ? '#FFFFFF' : colors.text,
+                  backgroundColor: isDarkMode ? colors.lightGray : '#F0F0F5',
                   borderColor: colors.border,
                 }
               ]}
@@ -425,7 +444,7 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
                   borderColor: colors.border,
                 }
               ]}
-              onPress={() => setShowDatePicker(true)}
+              onPress={() => setShowDatePickerModal(true)}
             >
               <Text style={{ color: colors.text }}>
                 {format(dueDate, 'EEEE, MMMM d, yyyy')}
@@ -433,15 +452,6 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               <MaterialIcons name="calendar-today" size={24} color={colors.primary} />
             </TouchableOpacity>
             
-            {showDatePicker && (
-              <DateTimePicker
-                value={dueDate}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-              />
-            )}
-
             {/* Time Toggle */}
             <View style={styles.switchRow}>
               <Text style={[styles.label, { color: colors.text }]}>Set Time</Text>
@@ -465,27 +475,13 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
                       marginTop: 10,
                     }
                   ]}
-                  onPress={() => setShowTimePicker(true)}
+                  onPress={() => setShowTimePickerModal(true)}
                 >
                   <Text style={{ color: colors.text }}>
                     {dueTime}
                   </Text>
                   <MaterialIcons name="access-time" size={24} color={colors.primary} />
                 </TouchableOpacity>
-                
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={(() => {
-                      const date = new Date();
-                      const [hours, minutes] = dueTime.split(':').map(Number);
-                      date.setHours(hours, minutes, 0, 0);
-                      return date;
-                    })()}
-                    mode="time"
-                    display="default"
-                    onChange={handleTimeChange}
-                  />
-                )}
               </>
             )}
             
@@ -658,7 +654,7 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
                           marginTop: 8,
                         }
                       ]}
-                      onPress={() => setShowRepeatEndDatePicker(true)}
+                      onPress={() => setShowRepeatEndDateModal(true)}
                     >
                       <Text style={{ color: colors.text }}>
                         {format(repeatEndDate, 'MMMM d, yyyy')}
@@ -682,21 +678,11 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
                           marginTop: 8,
                         }
                       ]}
-                      onPress={() => setShowRepeatEndDatePicker(true)}
+                      onPress={() => setShowRepeatEndDateModal(true)}
                     >
                       <MaterialIcons name="add" size={20} color={colors.primary} />
                       <Text style={{ color: colors.primary, marginLeft: 8 }}>Add end date</Text>
                     </TouchableOpacity>
-                  )}
-                  
-                  {showRepeatEndDatePicker && (
-                    <DateTimePicker
-                      value={repeatEndDate || new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={handleRepeatEndDateChange}
-                      minimumDate={new Date()} // Не позволяем выбирать даты в прошлом
-                    />
                   )}
                 </View>
               </View>

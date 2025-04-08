@@ -21,6 +21,24 @@ export async function requestNotificationPermissions() {
     finalStatus = status;
   }
 
+  // Android requires a notification channel
+  if (Platform.OS === 'android') {
+    // Create a channel for task reminders with high importance
+    await Notifications.setNotificationChannelAsync('task-reminders', {
+      name: 'Task Reminders',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      sound: 'default',
+    });
+
+    // Create a channel for general notifications
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'General Notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  }
+
   // Для iOS необходимы дополнительные шаги
   if (Platform.OS === 'ios') {
     await Notifications.setNotificationCategoryAsync('task-reminder', [

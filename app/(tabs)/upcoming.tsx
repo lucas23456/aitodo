@@ -285,8 +285,17 @@ export default function UpcomingScreen() {
       <CalendarModal
         visible={isCalendarVisible}
         onClose={() => setIsCalendarVisible(false)}
-        onSelectDate={handleDateSelect}
-        selectedDate={selectedDate}
+        selectedDate={new Date()}
+        onSelectDate={(date) => {
+          setIsCalendarVisible(false);
+          
+          setTimeout(() => {
+            router.push({
+              pathname: '/(tabs)',
+              params: { date: date.toISOString() }
+            });
+          }, 100);
+        }}
       />
       
       <TaskForm

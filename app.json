@@ -5,11 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "minimind",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-icon copy.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,7 +22,10 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice commands for creating tasks.",
         "UIBackgroundModes": ["audio", "remote-notification"]
-      }
+      },
+      "associatedDomains": [
+        "applinks:aonlvdzdlmzzxaswikvc.supabase.co"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -36,6 +39,28 @@
         "RECEIVE_BOOT_COMPLETED",
         "FOREGROUND_SERVICE",
         "WAKE_LOCK"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": {
+            "scheme": "minimind",
+            "host": "auth",
+            "pathPrefix": "/callback"
+          }
+        },
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "aonlvdzdlmzzxaswikvc.supabase.co",
+              "pathPrefix": "/auth/v1/callback"
+            }
+          ]
+        }
       ]
     },
     "web": {
