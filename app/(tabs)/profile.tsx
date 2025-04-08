@@ -1,9 +1,20 @@
-import React from 'react';
-import { View, StyleSheet, SafeAreaView } from 'react-native';
-import Account from '../../components/Account';
-import { useAuth } from '../../contexts/AuthContext';
-import { Stack } from 'expo-router';
-import { useTodoStore } from '@/store/todoStore';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  ScrollView, 
+  TouchableOpacity, 
+  TextInput,
+  Modal,
+  SafeAreaView,
+  Platform,
+  Alert,
+  Switch
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import Colors from '@/constants/Colors';
 import CapsuleMenu from '@/components/CapsuleMenu';
 
@@ -18,20 +29,335 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen
-        options={{
-          title: 'My Profile',
-          headerShown: true,
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-          headerTintColor: colors.text,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }}
-      />
-      <Account session={session} />
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
+      </View>
+      
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* User Profile Section */}
+        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
+          <View style={styles.avatarContainer}>
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.avatarText, { color: colorScheme === 'dark' ? colors.card : 'white' }]}>
+                JD
+              </Text>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={[styles.profileName, { color: colors.text }]}>John Doe</Text>
+              <Text style={[styles.profileEmail, { color: colors.secondaryText }]}>john.doe@example.com</Text>
+            </View>
+          </View>
+          
+          {/* Setup Call Button with Alarm Status */}
+          <View style={styles.alarmContainer}>
+            <TouchableOpacity 
+              style={[styles.setupCallButton, { backgroundColor: alarmSet ? colors.success : colors.primary }]}
+              onPress={() => setTimePickerVisible(true)}
+            >
+              <MaterialIcons name={alarmSet ? "alarm-on" : "call"} size={20} color="#FFFFFF" />
+              <Text style={styles.setupCallText}>
+                {alarmSet ? `Звонок в ${formatTime(scheduledTime)}` : "Настроить звонок"}
+              </Text>
+            </TouchableOpacity>
+            
+            {isPlaying && (
+              <TouchableOpacity 
+                style={[styles.stopButton, { backgroundColor: colors.error }]}
+                onPress={stopRingtone}
+              >
+                <MaterialIcons name="stop" size={20} color="#FFFFFF" />
+                <Text style={styles.setupCallText}>Остановить</Text>
+              </TouchableOpacity>
+            )}
+            
+            {alarmSet && !isPlaying && (
+              <TouchableOpacity 
+                style={[styles.stopButton, { backgroundColor: colors.error }]}
+                onPress={stopRingtone}
+              >
+                <MaterialIcons name="cancel" size={20} color="#FFFFFF" />
+                <Text style={styles.setupCallText}>Отменить будильник</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <View style={[styles.statsContainer, { borderTopColor: colors.border, borderTopWidth: 1 }]}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{projects.length}</Text>
+              <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Projects</Text>
+            </View>
+            
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {tasks.length}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Tasks</Text>
+            </View>
+            
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{getCompletedTaskCount()}</Text>
+              <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Completed</Text>
+            </View>
+          </View>
+        </View>
+        
+        {/* Projects Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Projects</Text>
+          <TouchableOpacity 
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={() => setNewProjectModalVisible(true)}
+          >
+            <MaterialIcons name="add" size={20} color={colorScheme === 'dark' ? colors.card : 'white'} />
+          </TouchableOpacity>
+        </View>
+        
+        {projects.length === 0 ? (
+          <View style={[styles.emptyProjectsCard, { backgroundColor: colors.card }]}>
+            <MaterialIcons name="folder" size={48} color={colors.secondaryText} />
+            <Text style={[styles.emptyProjectsText, { color: colors.secondaryText }]}>
+              No projects yet. Create your first project!
+            </Text>
+          </View>
+        ) : (
+          projects.map(project => (
+            <View 
+              key={project.id} 
+              style={[styles.projectCard, { backgroundColor: colors.card }]}
+            >
+              <View style={styles.projectHeader}>
+                <View style={[styles.projectColor, { backgroundColor: project.color }]} />
+                <Text style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
+                <TouchableOpacity onPress={() => handleDeleteProject(project.id)}>
+                  <MaterialIcons name="delete-outline" size={22} color={colors.secondaryText} />
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={[styles.projectDescription, { color: colors.secondaryText }]}>
+                {project.description}
+              </Text>
+              
+              <View style={styles.projectFooter}>
+                <View style={styles.projectStat}>
+                  <MaterialIcons name="assignment" size={16} color={colors.secondaryText} />
+                  <Text style={[styles.projectStatText, { color: colors.secondaryText }]}>
+                    {getProjectTaskCount(project.id)} tasks
+                  </Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.viewProjectButton}
+                  onPress={() => handleViewProject(project)}
+                >
+                  <Text style={[styles.viewProjectText, { color: colors.primary }]}>View</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+        
+        {/* Settings Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
+        </View>
+        
+        <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
+          {/* Dark Mode Setting */}
+          <View style={styles.settingRow}>
+            <View style={styles.settingLabelContainer}>
+              <MaterialIcons 
+                name={isDarkMode ? "nightlight-round" : "wb-sunny"} 
+                size={22} 
+                color={isDarkMode ? colors.primary : '#FFC107'} 
+              />
+              <Text style={[styles.settingLabel, { color: colors.text }]}>
+                Dark Mode
+              </Text>
+            </View>
+            <Switch
+              trackColor={{ 
+                false: isDarkMode ? '#333333' : '#D9D9D9', 
+                true: isDarkMode ? 'rgba(125, 187, 245, 0.5)' : '#81b0ff' 
+              }}
+              thumbColor={isDarkMode ? colors.primary : '#f4f3f4'}
+              ios_backgroundColor={isDarkMode ? '#333333' : '#D9D9D9'}
+              onValueChange={toggleDarkMode}
+              value={isDarkMode}
+              style={{ transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }] }}
+            />
+          </View>
+          
+          {/* Delete All Tasks Setting */}
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={handleDeleteAllTasks}
+          >
+            <View style={styles.settingLabelContainer}>
+              <MaterialIcons 
+                name="delete-forever" 
+                size={22} 
+                color={colors.danger} 
+              />
+              <Text style={[styles.settingLabel, { color: colors.danger }]}>
+                Delete All Tasks
+              </Text>
+            </View>
+            <MaterialIcons 
+              name="chevron-right" 
+              size={22} 
+              color={colors.danger} 
+            />
+          </TouchableOpacity>
+          
+          {/* Task Statistics */}
+          <View style={styles.settingStatsRow}>
+            <Text style={[styles.settingDescription, { color: colors.secondaryText }]}>
+              You have {tasks.length} tasks total, {getCompletedTaskCount()} completed
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+      
+      {/* New Project Modal */}
+      <Modal
+        visible={newProjectModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setNewProjectModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>New Project</Text>
+              <TouchableOpacity onPress={() => setNewProjectModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color={colors.secondaryText} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Project Name</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="Enter project name"
+              placeholderTextColor={colors.secondaryText}
+              value={newProjectName}
+              onChangeText={setNewProjectName}
+            />
+            
+            <Text style={[styles.inputLabel, { color: colors.text }]}>Description</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                styles.textArea,
+                { 
+                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F5F5F5',
+                  color: colors.text,
+                  borderColor: colors.border 
+                }
+              ]}
+              placeholder="Enter project description"
+              placeholderTextColor={colors.secondaryText}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={newProjectDescription}
+              onChangeText={setNewProjectDescription}
+            />
+            
+            <TouchableOpacity 
+              style={[
+                styles.addProjectButton, 
+                { 
+                  backgroundColor: newProjectName.trim() ? colors.primary : colors.lightGray 
+                }
+              ]}
+              onPress={handleAddProject}
+              disabled={!newProjectName.trim()}
+            >
+              <Text 
+                style={[
+                  styles.addProjectButtonText, 
+                  { 
+                    color: newProjectName.trim() 
+                      ? colorScheme === 'dark' ? colors.card : 'white' 
+                      : colors.secondaryText 
+                  }
+                ]}
+              >
+                Create Project
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Time Picker for iOS */}
+      {Platform.OS === 'ios' && timePickerVisible && (
+        <Modal
+          transparent={true}
+          animationType="slide"
+          visible={timePickerVisible}
+          onRequestClose={() => setTimePickerVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Выберите время звонка</Text>
+                <TouchableOpacity onPress={() => setTimePickerVisible(false)}>
+                  <MaterialIcons name="close" size={24} color={colors.secondaryText} />
+                </TouchableOpacity>
+              </View>
+              
+              <DateTimePicker
+                value={selectedTime}
+                mode="time"
+                display="spinner"
+                onChange={onTimeChange}
+                style={{ width: '100%' }}
+              />
+              
+              <TouchableOpacity 
+                style={[styles.addProjectButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  scheduleAlarm(selectedTime).then(scheduledDate => {
+                    const hours = scheduledDate.getHours();
+                    const minutes = scheduledDate.getMinutes();
+                    const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                    alert(`Звонок установлен на ${formattedTime}`);
+                    setTimePickerVisible(false);
+                  });
+                }}
+              >
+                <Text style={styles.addProjectButtonText}>Сохранить</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+      
+      {/* Time Picker for Android */}
+      {Platform.OS === 'android' && timePickerVisible && (
+        <DateTimePicker
+          value={selectedTime}
+          mode="time"
+          is24Hour={true}
+          display="default"
+          onChange={onTimeChange}
+        />
+      )}
+      
       <CapsuleMenu />
     </SafeAreaView>
   );
@@ -40,5 +366,275 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  profileCard: {
+    borderRadius: 16,
+    marginHorizontal: 8,
+    marginTop: 16,
+    marginBottom: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  profileInfo: {
+    marginLeft: 16,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+  },
+  alarmContainer: {
+    marginHorizontal: 20,
+    marginVertical: 16,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    paddingVertical: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+  },
+  statDivider: {
+    width: 1,
+    height: '80%',
+    alignSelf: 'center',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  addButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  projectCard: {
+    borderRadius: 12,
+    marginBottom: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  projectHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  projectColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  projectName: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  projectDescription: {
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  projectFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  projectStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  projectStatText: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  viewProjectButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  viewProjectText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '85%',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
+  },
+  addProjectButton: {
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  addProjectButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  emptyProjectsCard: {
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyProjectsText: {
+    fontSize: 16,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  setupCallButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 0,
+  },
+  stopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  setupCallText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginLeft: 8,
+    fontSize: 16,
+  },
+  settingsCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
+  },
+  settingLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  settingLabel: {
+    fontSize: 16,
+    marginLeft: 12,
+  },
+  settingStatsRow: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  settingDescription: {
+    fontSize: 14,
   },
 }); 

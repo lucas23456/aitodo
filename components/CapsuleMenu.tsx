@@ -1,21 +1,20 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from './useColorScheme';
-import { useTodoStore } from '@/store/todoStore';
 
 type CapsuleMenuProps = {};
 
 export default function CapsuleMenu({ }: CapsuleMenuProps) {
   const colorScheme = useColorScheme();
-  const isDarkMode = useTodoStore((state) => state.isDarkMode);
-  const colors = Colors[isDarkMode ? 'dark' : 'light'];
+  const colors = Colors[colorScheme ?? 'light'];
   const currentPath = usePathname();
 
   // Determine which screen is active to highlight the icon
   const isHomeActive = currentPath === '/' || currentPath === '/index';
+  const isUpcomingActive = currentPath === '/upcoming';
   const isProfileActive = currentPath === '/profile';
   const isVoiceActive = currentPath === '/voice-input';
   const isNotesActive = currentPath === '/notes';
@@ -23,6 +22,8 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
   const handleNavigate = (path: string) => {
     if (path === '/') {
       router.push('/');
+    } else if (path === '/upcoming') {
+      router.push('/upcoming');
     } else if (path === '/profile') {
       router.push('/profile');
     } else if (path === '/voice-input') {
@@ -34,22 +35,22 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
 
   return (
     <View style={[
-      styles.capsuleMenuContainer,
-      {
+      styles.capsuleMenuContainer, 
+      { 
         backgroundColor: isDarkMode ? 'rgba(36, 36, 36, 0.7)' : colors.background,
         borderWidth: isDarkMode ? 1 : 0,
         borderColor: isDarkMode ? 'rgba(125, 187, 245, 0.2)' : 'transparent'
       }
     ]}>
       <View style={[
-        styles.capsuleMenu,
-        {
+        styles.capsuleMenu, 
+        { 
           backgroundColor: isDarkMode ? 'rgba(18, 18, 18, 0.8)' : colors.card,
           borderWidth: isDarkMode ? 1 : 0,
           borderColor: isDarkMode ? 'rgba(125, 187, 245, 0.1)' : 'transparent'
         }
       ]}>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={[
             styles.capsuleButton,
             isHomeActive && isDarkMode && styles.activeButtonDark,
@@ -63,23 +64,8 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
             color={isHomeActive ? colors.primary : colors.text}
           />
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.capsuleButton,
-            isNotesActive && isDarkMode && styles.activeButtonDark,
-            isNotesActive && !isDarkMode && styles.activeButtonLight
-          ]}
-          onPress={() => handleNavigate('/notes')}
-        >
-          <MaterialIcons
-            name="note"
-            size={24}
-            color={isNotesActive ? colors.primary : colors.text}
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
+        
+        <TouchableOpacity 
           style={[
             styles.capsuleButton,
             isVoiceActive && isDarkMode && styles.activeButtonDark,
@@ -93,8 +79,8 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
             color={isVoiceActive ? colors.primary : colors.text}
           />
         </TouchableOpacity>
-
-        <TouchableOpacity
+        
+        <TouchableOpacity 
           style={[
             styles.capsuleButton,
             isProfileActive && isDarkMode && styles.activeButtonDark,
@@ -124,11 +110,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-    elevation: 6,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
   capsuleMenu: {
     flexDirection: 'row',
@@ -144,18 +130,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 8,
   },
-  activeButtonDark: {
-    backgroundColor: 'rgba(125, 187, 245, 0.15)',
-    shadowColor: 'rgba(125, 187, 245, 0.5)',
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  activeButtonLight: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-  }
 }); 
