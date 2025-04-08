@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { MaterialIcons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from './useColorScheme';
+import { useTodoStore } from '@/store/todoStore';
 
 type CalendarModalProps = {
   visible: boolean;
@@ -29,8 +30,8 @@ export default function CalendarModal({
   markedDates = {}
 }: CalendarModalProps) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDarkMode = colorScheme === 'dark';
+  const isDarkMode = useTodoStore((state) => state.isDarkMode);
+  const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
   // Format the selected date to YYYY-MM-DD for the calendar
   const formattedDate = format(selectedDate, 'yyyy-MM-dd');
@@ -40,21 +41,21 @@ export default function CalendarModal({
     backgroundColor: 'transparent',
     calendarBackground: 'transparent',
     textSectionTitleColor: colors.text,
-    textSectionTitleDisabledColor: colors.gray,
+    textSectionTitleDisabledColor: colors.secondaryText,
     selectedDayBackgroundColor: colors.primary,
-    selectedDayTextColor: '#ffffff',
+    selectedDayTextColor: isDarkMode ? '#000000' : '#FFFFFF',
     todayTextColor: colors.primary,
     dayTextColor: colors.text,
-    textDisabledColor: colors.gray,
+    textDisabledColor: isDarkMode ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
     dotColor: colors.primary,
-    selectedDotColor: '#ffffff',
+    selectedDotColor: isDarkMode ? '#000000' : '#FFFFFF',
     arrowColor: colors.primary,
-    disabledArrowColor: colors.gray,
+    disabledArrowColor: colors.secondaryText,
     monthTextColor: colors.text,
     indicatorColor: colors.primary,
-    textDayFontWeight: '300' as const,
+    textDayFontWeight: '400' as const,
     textMonthFontWeight: 'bold' as const,
-    textDayHeaderFontWeight: '300' as const,
+    textDayHeaderFontWeight: '500' as const,
     textDayFontSize: 16,
     textMonthFontSize: 16,
     textDayHeaderFontSize: 14
@@ -76,12 +77,28 @@ export default function CalendarModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.95)' : 'rgba(255,255,255,0.95)' }]}>
-        <View style={[styles.content, { backgroundColor: colors.card }]}>
+      <SafeAreaView style={[
+        styles.container, 
+        { backgroundColor: isDarkMode ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255,255,255,0.95)' }
+      ]}>
+        <View style={[
+          styles.content, 
+          { 
+            backgroundColor: colors.card,
+            borderWidth: isDarkMode ? 1 : 0,
+            borderColor: isDarkMode ? 'rgba(125, 187, 245, 0.2)' : 'transparent',
+          }
+        ]}>
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>Calendar</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <MaterialIcons name="close" size={24} color={colors.gray} />
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={[
+                styles.closeButton,
+                isDarkMode && styles.closeButtonDark
+              ]}
+            >
+              <MaterialIcons name="close" size={24} color={isDarkMode ? colors.primary : colors.gray} />
             </TouchableOpacity>
           </View>
           
@@ -113,6 +130,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   header: {
     flexDirection: 'row',
@@ -125,6 +150,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeButton: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
   },
+  closeButtonDark: {
+    backgroundColor: 'rgba(125, 187, 245, 0.1)',
+  }
 }); 

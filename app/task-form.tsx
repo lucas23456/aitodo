@@ -146,7 +146,7 @@ export default function TaskFormModal({ visible, onClose, onSubmit, initialTask 
                   styles.titleInput,
                   { 
                     backgroundColor: colors.card,
-                    color: colors.text,
+                    color: isDarkMode ? '#FFFFFF' : colors.text,
                     borderColor: colors.border
                   }
                 ]}

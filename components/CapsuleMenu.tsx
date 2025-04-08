@@ -1,20 +1,21 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from './useColorScheme';
+import { useTodoStore } from '@/store/todoStore';
 
 type CapsuleMenuProps = {};
 
 export default function CapsuleMenu({ }: CapsuleMenuProps) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const isDarkMode = useTodoStore((state) => state.isDarkMode);
+  const colors = Colors[isDarkMode ? 'dark' : 'light'];
   const currentPath = usePathname();
 
   // Determine which screen is active to highlight the icon
   const isHomeActive = currentPath === '/' || currentPath === '/index';
-  const isUpcomingActive = currentPath === '/upcoming';
   const isProfileActive = currentPath === '/profile';
   const isVoiceActive = currentPath === '/voice-input';
   const isNotesActive = currentPath === '/notes';
@@ -22,8 +23,6 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
   const handleNavigate = (path: string) => {
     if (path === '/') {
       router.push('/');
-    } else if (path === '/upcoming') {
-      router.push('/upcoming');
     } else if (path === '/profile') {
       router.push('/profile');
     } else if (path === '/voice-input') {
@@ -110,11 +109,11 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 3,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 6,
   },
   capsuleMenu: {
     flexDirection: 'row',
@@ -130,4 +129,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 8,
   },
+  activeButtonDark: {
+    backgroundColor: 'rgba(125, 187, 245, 0.15)',
+    shadowColor: 'rgba(125, 187, 245, 0.5)',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  activeButtonLight: {
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+  }
 }); 

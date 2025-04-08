@@ -13,6 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { useTodoStore } from '../store/todoStore';
 import { useColorScheme } from './useColorScheme';
+import { getTagColor } from '../constants/Colors';
 
 interface TagCreatorProps {
   visible: boolean;
@@ -68,23 +69,37 @@ export default function TagCreator({ visible, onClose, onSelect }: TagCreatorPro
     );
   };
   
-  const renderItem = ({ item }: { item: string }) => (
-    <View style={styles.tagItem}>
-      <TouchableOpacity 
-        style={styles.tagButton} 
-        onPress={() => handleSelectTag(item)}
-      >
-        <Text style={[styles.tagText, { color: colors.text }]}>{item}</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() => handleDeleteTag(item)}
-      >
-        <MaterialIcons name="close" size={18} color={colors.danger} />
-      </TouchableOpacity>
-    </View>
-  );
+  const renderItem = ({ item }: { item: string }) => {
+    const tagColor = getTagColor(item);
+    
+    return (
+      <View style={styles.tagItem}>
+        <TouchableOpacity 
+          style={[
+            styles.tagButton,
+            {
+              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : '#F0F0F5',
+              borderLeftWidth: 3,
+              borderLeftColor: tagColor
+            }
+          ]} 
+          onPress={() => handleSelectTag(item)}
+        >
+          <Text style={[styles.tagText, { color: colors.text }]}>{item}</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[
+            styles.deleteButton,
+            { backgroundColor: isDarkMode ? 'rgba(244, 67, 54, 0.1)' : 'rgba(244, 67, 54, 0.05)' }
+          ]}
+          onPress={() => handleDeleteTag(item)}
+        >
+          <MaterialIcons name="close" size={18} color={colors.danger} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
   
   return (
     <Modal
@@ -93,14 +108,30 @@ export default function TagCreator({ visible, onClose, onSelect }: TagCreatorPro
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.centeredView}>
-        <View style={[styles.modalView, { backgroundColor: colors.card }]}>
+      <View style={[
+        styles.centeredView,
+        { backgroundColor: isDarkMode ? 'rgba(18, 18, 18, 0.9)' : 'rgba(0, 0, 0, 0.5)' }
+      ]}>
+        <View style={[
+          styles.modalView, 
+          { 
+            backgroundColor: colors.card,
+            borderWidth: isDarkMode ? 1 : 0,
+            borderColor: isDarkMode ? 'rgba(125, 187, 245, 0.2)' : 'transparent'
+          }
+        ]}>
           <View style={styles.headerContainer}>
             <Text style={[styles.title, { color: colors.text }]}>
               Custom Tags
             </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <MaterialIcons name="close" size={24} color={colors.text} />
+            <TouchableOpacity 
+              onPress={onClose} 
+              style={[
+                styles.closeButton,
+                isDarkMode && { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: 20 }
+              ]}
+            >
+              <MaterialIcons name="close" size={24} color={isDarkMode ? colors.primary : colors.text} />
             </TouchableOpacity>
           </View>
           
@@ -110,12 +141,12 @@ export default function TagCreator({ visible, onClose, onSelect }: TagCreatorPro
                 styles.input,
                 { 
                   color: colors.text,
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
-                  borderColor: colors.border
+                  backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : '#F0F0F5',
+                  borderColor: isDarkMode ? 'rgba(125, 187, 245, 0.2)' : colors.border
                 }
               ]}
               placeholder="New tag name"
-              placeholderTextColor={colors.gray}
+              placeholderTextColor={colors.secondaryText}
               value={newTag}
               onChangeText={setNewTag}
             />
@@ -123,7 +154,7 @@ export default function TagCreator({ visible, onClose, onSelect }: TagCreatorPro
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAddTag}
             >
-              <MaterialIcons name="add" size={24} color="white" />
+              <MaterialIcons name="add" size={24} color={isDarkMode ? '#000000' : '#FFFFFF'} />
             </TouchableOpacity>
           </View>
           
@@ -156,21 +187,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     padding: 20,
   },
   modalView: {
     width: '100%',
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
     maxHeight: '80%',
   },
   headerContainer: {
@@ -184,7 +214,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeButton: {
-    padding: 5,
+    padding: 8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -207,29 +237,31 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 10,
   },
   list: {
-    maxHeight: 300,
+    width: '100%',
   },
   tagItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   tagButton: {
     flex: 1,
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    marginRight: 10,
+    marginRight: 8,
   },
   tagText: {
-    fontSize: 14,
+    fontSize: 16,
   },
   deleteButton: {
     padding: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     padding: 20,

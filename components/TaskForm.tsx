@@ -176,7 +176,8 @@ const TagButton = ({ tag, selectedTags, onPress }: { tag: string, selectedTags: 
 
 export default function TaskForm({ visible, onClose, onSubmit, initialTask }: TaskFormProps) {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const isDarkMode = useTodoStore((state) => state.isDarkMode);
+  const colors = Colors[isDarkMode ? 'dark' : 'light'];
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -403,8 +404,8 @@ export default function TaskForm({ visible, onClose, onSubmit, initialTask }: Ta
               style={[
                 styles.input, 
                 { 
-                  color: colors.text,
-                  backgroundColor: colorScheme === 'dark' ? colors.lightGray : '#F0F0F5',
+                  color: isDarkMode ? '#FFFFFF' : colors.text,
+                  backgroundColor: isDarkMode ? colors.lightGray : '#F0F0F5',
                   borderColor: colors.border,
                 }
               ]}
