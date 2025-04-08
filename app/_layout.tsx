@@ -1,19 +1,16 @@
-import React, { useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
-import { View, ActivityIndicator } from 'react-native';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { useTodoStore, initializeStore } from '@/store/todoStore';
 import { setupNotificationListeners, requestNotificationPermissions } from '@/utils/notifications';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -27,41 +24,6 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-
-// Separating the AuthWrapper to contain all auth-related logic
-function AuthWrapper() {
-  const { session, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
-
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      {session ? (
-        // User is signed in - show app screens
-        <>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="task-details" options={{ title: 'Task Details' }} />
-          <Stack.Screen name="task-form" options={{ title: 'Add Task' }} />
-          <Stack.Screen name="project-details" options={{ title: 'Project Details' }} />
-          <Stack.Screen name="voice-input" options={{ headerShown: false, title: 'Voice Input' }} />
-          <Stack.Screen name="notes" options={{ headerShown: false, title: 'Notes' }} />
-        </>
-      ) : (
-        // User is not signed in - show auth screens
-        <>
-          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-        </>
-      )}
-    </Stack>
-  );
-}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -113,12 +75,23 @@ export default function RootLayout() {
     return null;
   }
 
+  return <RootLayoutNav />;
+}
+
+function RootLayoutNav() {
+  const colorScheme = useColorScheme();
+  const isDarkMode = useTodoStore(state => state.isDarkMode);
+
+  // Use the custom dark mode state from the store instead of system setting
+  const theme = isDarkMode ? DarkTheme : DefaultTheme;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={useColorScheme() === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthProvider>
-          <AuthWrapper />
-        </AuthProvider>
+      <ThemeProvider value={theme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

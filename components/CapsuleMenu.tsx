@@ -7,18 +7,17 @@ import { useColorScheme } from './useColorScheme';
 
 type CapsuleMenuProps = {};
 
-export default function CapsuleMenu({ }: CapsuleMenuProps) {
+export default function CapsuleMenu({}: CapsuleMenuProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const currentPath = usePathname();
-
+  
   // Determine which screen is active to highlight the icon
   const isHomeActive = currentPath === '/' || currentPath === '/index';
   const isUpcomingActive = currentPath === '/upcoming';
   const isProfileActive = currentPath === '/profile';
   const isVoiceActive = currentPath === '/voice-input';
-  const isNotesActive = currentPath === '/notes';
-
+  
   const handleNavigate = (path: string) => {
     if (path === '/') {
       router.push('/');
@@ -28,11 +27,9 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
       router.push('/profile');
     } else if (path === '/voice-input') {
       router.push('/voice-input');
-    } else if (path === '/notes') {
-      router.push('/notes');
     }
   };
-
+  
   return (
     <View style={[styles.capsuleMenuContainer, { backgroundColor: colors.background }]}>
       <View style={[styles.capsuleMenu, { backgroundColor: colors.card }]}>
@@ -40,10 +37,10 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
           style={styles.capsuleButton}
           onPress={() => handleNavigate('/')}
         >
-          <MaterialIcons
-            name="home"
-            size={24}
-            color={isHomeActive ? colors.primary : colors.text}
+          <MaterialIcons 
+            name="home" 
+            size={24} 
+            color={isHomeActive ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
@@ -62,10 +59,10 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
           style={styles.capsuleButton}
           onPress={() => handleNavigate('/voice-input')}
         >
-          <MaterialIcons
-            name="mic"
-            size={24}
-            color={isVoiceActive ? colors.primary : colors.text}
+          <MaterialIcons 
+            name="mic" 
+            size={24} 
+            color={isVoiceActive ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
         
@@ -73,10 +70,10 @@ export default function CapsuleMenu({ }: CapsuleMenuProps) {
           style={styles.capsuleButton}
           onPress={() => handleNavigate('/profile')}
         >
-          <MaterialIcons
-            name="person"
-            size={24}
-            color={isProfileActive ? colors.primary : colors.text}
+          <MaterialIcons 
+            name="person" 
+            size={24} 
+            color={isProfileActive ? colors.primary : colors.text} 
           />
         </TouchableOpacity>
       </View>

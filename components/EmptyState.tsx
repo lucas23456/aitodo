@@ -18,7 +18,7 @@ export default function EmptyState({ message = 'No tasks yet!' }: EmptyStateProp
         <MaterialCommunityIcons 
           name="clipboard-text-outline" 
           size={64} 
-          color="white" 
+          color={colors.primary} 
         />
       </View>
       <Text style={[styles.message, { color: colors.text }]}>

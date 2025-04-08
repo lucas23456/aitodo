@@ -15,17 +15,330 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import Colors from '@/constants/Colors';
+import { useTodoStore, Project } from '@/store/todoStore';
+import { useColorScheme } from '@/components/useColorScheme';
 import CapsuleMenu from '@/components/CapsuleMenu';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
+import AlarmService from '@/app/services/AlarmService';
 
 export default function ProfileScreen() {
-  const { session } = useAuth();
+  const colorScheme = useColorScheme();
   const isDarkMode = useTodoStore((state) => state.isDarkMode);
   const colors = Colors[isDarkMode ? 'dark' : 'light'];
+  
+  const projects = useTodoStore((state) => state.projects);
+  const tasks = useTodoStore((state) => state.tasks);
+  const addProject = useTodoStore((state) => state.addProject);
+  const deleteProject = useTodoStore((state) => state.deleteProject);
+  const deleteAllTasks = useTodoStore((state) => state.deleteAllTasks);
+  const toggleDarkMode = useTodoStore((state) => state.toggleDarkMode);
+  
+  const [newProjectModalVisible, setNewProjectModalVisible] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectDescription, setNewProjectDescription] = useState('');
+  
+  // Time picker state
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [selectedTime, setSelectedTime] = useState(new Date());
+  
+  // Audio state
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [alarmSet, setAlarmSet] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState<Date | null>(null);
+  
+  // Setup call modal state
+  const [setupCallModalVisible, setSetupCallModalVisible] = useState(false);
+  const [callName, setCallName] = useState('');
+  const [callDate, setCallDate] = useState('');
+  const [callTime, setCallTime] = useState('');
+  const [callNotes, setCallNotes] = useState('');
+  
+  // Настройка обработчика уведомлений для запуска проигрывания звука
+  useEffect(() => {
+    // Настройка обработчика для выполнения кода при получении уведомления
+    const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Получено уведомление:', notification?.request?.content?.data);
+      
+      // Воспроизводим звук только если это уведомление от будильника
+      if (notification?.request?.content?.data?.type === 'alarm') {
+        console.log('Запуск воспроизведения будильника по уведомлению');
+        playRingtone();
+      }
+    });
+    
+    // Запрос разрешений на уведомления при монтировании компонента
+    const requestPermissions = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Разрешите уведомления, чтобы будильник работал правильно!');
+      }
+    };
+    
+    requestPermissions();
+    
+    // Проверяем, есть ли активный будильник при загрузке компонента
+    const checkExistingAlarms = async () => {
+      try {
+        const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+        
+        // Ищем уведомления будильника
+        const alarmNotifications = scheduledNotifications.filter(
+          notification => notification.content.data?.type === 'alarm'
+        );
+        
+        if (alarmNotifications.length > 0) {
+          console.log('Найдены запланированные будильники:', alarmNotifications.length);
+          
+          // Найдем следующий будильник с наиболее ранней датой
+          let nextAlarmDate: Date | null = null;
+          
+          for (const notification of alarmNotifications) {
+            // Безопасное извлечение даты из структуры уведомления
+            try {
+              // Type assertion to handle notification trigger structure
+              type TriggerWithDate = { date: string | number | Date };
+              const trigger = notification.trigger as unknown as TriggerWithDate;
+              const triggerDate = trigger && 'date' in trigger
+                ? new Date(trigger.date) 
+                : null;
+                
+              if (triggerDate && (nextAlarmDate === null || triggerDate < nextAlarmDate)) {
+                nextAlarmDate = triggerDate;
+              }
+            } catch (e) {
+              console.log('Ошибка при извлечении даты из уведомления:', e);
+            }
+          }
+          
+          if (nextAlarmDate) {
+            console.log('Найден запланированный будильник на:', nextAlarmDate.toLocaleTimeString());
+            
+            // Обновляем состояние
+            setScheduledTime(nextAlarmDate);
+            setAlarmSet(true);
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при проверке существующих будильников:', error);
+      }
+    };
+    
+    checkExistingAlarms();
+    
+    return () => {
+      notificationSubscription.remove();
+    };
+  }, []);
+  
+  // Load and play the ringtone
+  const playRingtone = async () => {
+    console.log('Playing ringtone...');
+    
+    try {
+      // Unload any previous sound
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      
+      // Устанавливаем режим аудио для воспроизведения 
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      
+      // Load the sound file
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        require('@/assets/sounds/ringtone.mp3'),
+        { shouldPlay: true, isLooping: true }
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      
+      // When playback finishes
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.error('Error playing sound:', error);
+    }
+  };
+  
+  // Stop the ringtone
+  const stopRingtone = async () => {
+    if (sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+    }
+    
+    // Остановить фоновую задачу и уведомления
+    await AlarmService.stopAlarmSound();
+    setAlarmSet(false);
+    setScheduledTime(null);
+  };
+  
+  // Schedule the alarm for the selected time
+  const scheduleAlarm = async (selectedDate: Date): Promise<Date> => {
+    // Calculate milliseconds until the alarm should trigger
+    const now = new Date();
+    let targetTime = new Date(now);
+    targetTime.setHours(selectedDate.getHours());
+    targetTime.setMinutes(selectedDate.getMinutes());
+    targetTime.setSeconds(0);
+    
+    // If the time is in the past (for today), schedule it for tomorrow
+    if (targetTime <= now) {
+      targetTime.setDate(targetTime.getDate() + 1);
+    }
+    
+    console.log(`Установка будильника на ${targetTime.toLocaleTimeString()}`);
+    
+    // Использовать новый метод планирования будильника
+    const success = await AlarmService.scheduleAlarmNotification(targetTime);
+    
+    if (success) {
+      // Save the scheduled time and mark alarm as set
+      setScheduledTime(targetTime);
+      setAlarmSet(true);
+    } else {
+      alert('Не удалось установить будильник. Проверьте разрешения приложения.');
+    }
+    
+    return targetTime;
+  };
+  
+  // Clean up resources when component unmounts
+  useEffect(() => {
+    return () => {
+      // Unload the sound when component unmounts
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+  
+  // Setup audio mode on component mount
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error('Failed to set audio mode:', error);
+      }
+    };
+    
+    setupAudio();
+  }, []);
+  
+  // Handle setup call
+  const handleSetupCall = () => {
+    // Here you would integrate with your calendar API or save the call details
+    alert(`Call scheduled: ${callName} on ${callDate} at ${callTime}`);
+    setSetupCallModalVisible(false);
+    // Reset form
+    setCallName('');
+    setCallDate('');
+    setCallTime('');
+    setCallNotes('');
+  };
+  
+  // Add a new project
+  const handleAddProject = () => {
+    if (newProjectName.trim()) {
+      const newProject = {
+        name: newProjectName.trim(),
+        description: newProjectDescription.trim(),
+        color: '#' + Math.floor(Math.random() * 16777215).toString(16), // Random color
+      };
+      
+      addProject(newProject);
+      setNewProjectName('');
+      setNewProjectDescription('');
+      setNewProjectModalVisible(false);
+    }
+  };
+  
+  // Delete a project
+  const handleDeleteProject = (id: string) => {
+    deleteProject(id);
+  };
 
-  if (!session) {
-    return null; // Should not happen due to auth routing, but for safety
-  }
-
+  // Navigate to project details
+  const handleViewProject = (project: Project) => {
+    router.push({
+      pathname: '/project-details',
+      params: { id: project.id }
+    });
+  };
+  
+  // Get task count for a project
+  const getProjectTaskCount = (projectId: string) => {
+    return tasks.filter(task => task.projectId === projectId).length;
+  };
+  
+  // Get total completed task count
+  const getCompletedTaskCount = () => {
+    return tasks.filter(task => task.completed).length;
+  };
+  
+  // Handle time change
+  const onTimeChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || selectedTime;
+    setTimePickerVisible(Platform.OS === 'ios');
+    setSelectedTime(currentDate);
+    
+    if (Platform.OS === 'android' && event.type === 'set') {
+      // For Android, schedule alarm immediately after time selection
+      scheduleAlarm(currentDate).then(scheduledDate => {
+        const hours = scheduledDate.getHours();
+        const minutes = scheduledDate.getMinutes();
+        const formattedTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        alert(`Звонок установлен на ${formattedTime}`);
+      });
+    }
+  };
+  
+  // Format time for display
+  const formatTime = (date: Date | null): string => {
+    if (!date) return '';
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+  
+  // Handle delete all tasks
+  const handleDeleteAllTasks = () => {
+    Alert.alert(
+      'Delete All Tasks',
+      'Are you sure you want to delete all tasks? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete All', 
+          style: 'destructive',
+          onPress: () => {
+            deleteAllTasks();
+            Alert.alert('Success', 'All tasks have been deleted.');
+          }
+        }
+      ]
+    );
+  };
+  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />

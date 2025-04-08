@@ -57,10 +57,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="notes"
+        name="voice-input"
         options={{
-          title: 'Notes',
-          tabBarIcon: ({ color }) => <TabBarIcon name="note" color={color} />,
+          title: 'Voice Input',
+          tabBarIcon: ({ color }) => <TabBarIcon name="mic" color={color} />,
         }}
       />
     </Tabs>
