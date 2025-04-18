@@ -1,64 +1,71 @@
-# VoiceTodo App
+# AI ToDo - Приложение для заметок и задач
 
-A clean and modern Todo application built with React Native and Expo.
+## Описание
 
-## Features
+AI ToDo - это мобильное приложение для управления задачами и заметками с поддержкой голосового ввода и анализа текста с помощью искусственного интеллекта. Приложение разработано с использованием React Native и Expo.
 
-- Create, update, delete, and mark tasks as completed
-- Clean and modern UI with a dark mode toggle
-- Swipe gestures for task actions
-- Local data persistence
-- Due date reminders
-- Beautiful animations
+## Возможности
 
-## Setup and Running
+- Создание, редактирование и удаление заметок и задач
+- Голосовой ввод с автоматической транскрипцией
+- Автоматическая генерация тегов для заметок с помощью ИИ
+- Анализ заметок для создания задач
+- Фильтрация заметок по категориям
+- Поиск по содержимому заметок
+- Темная и светлая тема
+- Локальное хранение данных
 
-1. **Install dependencies**
+## Требования
+
+- Node.js (рекомендуется версия 16 или выше)
+- npm или yarn
+- Expo Go на мобильном устройстве или эмулятор Android/iOS на компьютере
+
+## Установка
+
+1. Клонируйте репозиторий:
+
+```bash
+git clone <url-репозитория>
+cd aitodo
+```
+
+2. Установите зависимости:
 
 ```bash
 npm install
+# или
+yarn install
 ```
 
-2. **Fix dependencies (if needed)**
+## Запуск на мобильном устройстве
 
-If you encounter any dependency issues, run:
+### Метод 1: Использование Expo Go (самый простой способ)
 
-```bash
-npx expo install @react-native-async-storage/async-storage@1.23.1 @react-native-community/datetimepicker@8.2.0 react-native-gesture-handler@~2.20.2 react-native-reanimated@~3.16.1
-```
+1. Установите приложение Expo Go на ваше мобильное устройство:
 
-3. **Start the application**
+   - [Android: Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent)
+   - [iOS: App Store](https://apps.apple.com/app/expo-go/id982107779)
+
+2. Запустите сервер разработки:
 
 ```bash
 npx expo start
 ```
 
-4. **Run on a device or emulator**
+3. Отсканируйте QR-код, который появится в терминале:
+   - На Android: используйте приложение Expo Go для сканирования
+   - На iOS: используйте приложение камеры для сканирования
 
-- Scan the QR code with the Expo Go app (Android)
-- Scan the QR code with the Camera app (iOS)
-- Press 'a' to run on an Android emulator
-- Press 'i' to run on an iOS simulator
+Приложение запустится на вашем устройстве через Expo Go.
 
-## Project Structure
+### Метод 2: Создание билда для тестирования (Preview)
 
-- `/app` - Main application screens and navigation
-- `/components` - Reusable UI components
-- `/store` - State management using Zustand
-- `/constants` - Colors and theme definition
-- `/assets` - Images and fonts
+1. Запустите создание Preview-билда:
 
-## Technologies Used
-
-- React Native
-- Expo
-- Zustand for state management
-- AsyncStorage for data persistence
-- React Native Gesture Handler
-- React Native Reanimated
-- React Navigation (Expo Router)
-- TypeScript
-
-## License
-
-MIT
+```bash
+npx expo prebuild
+npx expo build:android # для Android
+# или
+npx expo build:ios # для iOS
+```
